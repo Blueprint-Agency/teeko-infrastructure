@@ -14,4 +14,4 @@ else
   exit 1
 fi
 
-exec npx -y @cloudflare/mcp-server-cloudflare
+exec npx -y mcp-remote https://mcp.cloudflare.com/mcp --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
