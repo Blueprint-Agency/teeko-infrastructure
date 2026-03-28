@@ -82,6 +82,7 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 - **All credentials must live in `.env` only** — never hardcode tokens or passwords in `.claude/settings.json` or any other file. MCP servers must use wrapper scripts (e.g. `mcp/start-*.sh`) that source `.env` at startup.
 - `.claude/settings.json` is gitignored (contains tokens). Use `mcp/mcp-config.json` as template.
 - Each VPS folder has its own `docker-compose.yml` under `vps/<alias>/`.
+- **Docker 29.x on VPS2/VPS3**: These VPS run Docker 29.1.3 which raises `MinAPIVersion` to 1.44. Traefik's Docker provider negotiates from 1.24 and gets rejected. Fix applied via `/etc/systemd/system/docker.service.d/min-api.conf` (`DOCKER_MIN_API_VERSION=1.24`) on each VPS. Must reapply if Docker is reinstalled.
 - When adding a new app: update `apps/registry.yml` AND the target VPS `docker-compose.yml`.
 - Shared deploy/healthcheck/setup scripts are in `vps/shared/`.
 
