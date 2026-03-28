@@ -29,13 +29,13 @@ services:
       - proxy
 
   # NOTE: service named 'db-site' so site-be can reach it as DB_HOST=db-site
-  # .env.site-db shares the same credentials as .env.site-be (DB_USER/DB_PASSWORD/DB_NAME).
-  # In the website CI/CD, generate .env.site-db from the same DB_* secrets — no separate secret needed.
+  # Shares .env.site-be — the website CI/CD writes both DB_* (for site-be) and
+  # POSTGRES_* (for postgres init) into that single file. No separate .env.site-db needed.
   db-site:
     image: postgres:alpine
     container_name: site-db
     restart: unless-stopped
-    env_file: .env.site-db
+    env_file: .env.site-be
     volumes:
       - teeko-website-db:/var/lib/postgresql
     networks:
