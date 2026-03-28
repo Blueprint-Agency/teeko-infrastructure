@@ -3,6 +3,11 @@
 # Apps are deployed via GHA when pushing to the staging branch.
 
 services:
+
+  # ======================================
+  # Reverse Proxy
+  # ======================================
+
   traefik:
     image: traefik:v3.1
     container_name: traefik
@@ -26,14 +31,13 @@ services:
       - traefik-letsencrypt:/letsencrypt
     labels:
       - "traefik.enable=true"
-      # Dashboard (optional, protected by basic auth)
       - "traefik.http.routers.dashboard.rule=Host(`traefik.${BASE_DOMAIN}`)"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dashboard.middlewares=auth"
       - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
-      # HTTP to HTTPS redirect
+      # HTTP → HTTPS redirect
       - "traefik.http.routers.http-catchall.rule=hostregexp(`.+`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
@@ -42,26 +46,158 @@ services:
       - proxy
 
   # ======================================
-  # App services go below.
-  # After MCP audit, we'll add each app like:
+  # Teeko Site (staging)
   # ======================================
-  #
-  # my-app:
-  #   image: dockerhub-user/my-app:staging
-  #   container_name: my-app-staging
-  #   restart: unless-stopped
-  #   env_file: .env
-  #   labels:
-  #     - "traefik.enable=true"
-  #     - "traefik.http.routers.my-app.rule=Host(`my-app.staging.${BASE_DOMAIN}`)"
-  #     - "traefik.http.routers.my-app.entrypoints=websecure"
-  #     - "traefik.http.routers.my-app.tls.certresolver=letsencrypt"
-  #     - "traefik.http.services.my-app.loadbalancer.server.port=3000"
-  #   networks:
-  #     - proxy
+
+  site-fe:
+    image: chriskke/teeko-site-fe:staging
+    container_name: site-fe
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.site-fe.rule=Host(`staging.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.site-fe.entrypoints=websecure"
+      - "traefik.http.routers.site-fe.tls.certresolver=letsencrypt"
+      - "traefik.http.services.site-fe.loadbalancer.server.port=5000"
+    networks:
+      - proxy
+
+  site-be:
+    image: chriskke/teeko-site-be:staging
+    container_name: site-be
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.site-be.rule=Host(`stagingapi.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.site-be.entrypoints=websecure"
+      - "traefik.http.routers.site-be.tls.certresolver=letsencrypt"
+      - "traefik.http.services.site-be.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+
+  site-db:
+    image: postgres:alpine
+    container_name: site-db
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - site-db-data:/var/lib/postgresql/data
+    networks:
+      - proxy
+
+  # ======================================
+  # Teeko Webapp (staging)
+  # ======================================
+
+  webapp-fe:
+    image: chriskke/teeko-webapp-fe:staging
+    container_name: webapp-fe
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webapp-fe.rule=Host(`stagingapp.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.webapp-fe.entrypoints=websecure"
+      - "traefik.http.routers.webapp-fe.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webapp-fe.loadbalancer.server.port=5173"
+    networks:
+      - proxy
+
+  webapp-be:
+    image: chriskke/teeko-webapp-be:staging
+    container_name: webapp-be
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webapp-be.rule=Host(`stagingappapi.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.webapp-be.entrypoints=websecure"
+      - "traefik.http.routers.webapp-be.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webapp-be.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+
+  webapp-db:
+    image: postgres:alpine
+    container_name: webapp-db
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - webapp-db-data:/var/lib/postgresql/data
+    networks:
+      - proxy
+
+  # ======================================
+  # n8n (dev/staging)
+  # ======================================
+
+  n8n-dev:
+    image: n8nio/n8n:latest
+    container_name: n8n-dev
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n-dev.rule=Host(`stagingn8n.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.n8n-dev.entrypoints=websecure"
+      - "traefik.http.routers.n8n-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.services.n8n-dev.loadbalancer.server.port=5678"
+    networks:
+      - proxy
+
+  n8n-db:
+    image: postgres:alpine
+    container_name: n8n-db
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - n8n-db-data:/var/lib/postgresql/data
+    networks:
+      - proxy
+
+  # ======================================
+  # Tools
+  # ======================================
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pgadmin.rule=Host(`stagingpg.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+    networks:
+      - proxy
+
+  # NOTE: portainer to be removed per migration backlog
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer-data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`port.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+    networks:
+      - proxy
 
 volumes:
   traefik-letsencrypt:
+  site-db-data:
+  webapp-db-data:
+  n8n-db-data:
+  portainer-data:
 
 networks:
   proxy:

@@ -87,10 +87,12 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 ## Migration Status
 
 - [x] SSH key access to all 3 VPS
-- [x] MCP servers configured (ssh-manager + github)
+- [x] MCP servers configured (github)
 - [x] Container audit complete
 - [x] App registry populated
-- [ ] Nginx Proxy Manager → Traefik migration
+- [x] Nginx Proxy Manager → Traefik migration (VPS1 staging docker-compose updated)
+- [ ] Deploy Traefik on VPS1 (cut over from nginx-proxy-manager)
+- [ ] Nginx Proxy Manager → Traefik migration (VPS2, VPS3)
 - [ ] Remove Portainer + Watchtower
 - [ ] Deploy monitoring stack (Grafana + Prometheus)
 - [ ] Wire up GHA deploy workflows in monorepos
