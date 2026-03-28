@@ -22,7 +22,7 @@ for (const line of lines) {
   process.env[key] = value;
 }
 
-const child = spawn('npx', ['-y', '@modelcontextprotocol/server-github'], {
+const child = spawn('npx', ['-y', '@github/mcp-server'], {
   stdio: 'inherit',
   env: process.env,
   shell: true,

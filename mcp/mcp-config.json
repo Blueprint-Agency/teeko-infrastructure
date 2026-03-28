@@ -14,8 +14,8 @@
       "args": ["mcp/start-docker-mcp.sh", "prod-vps3"]
     },
     "github": {
-      "command": "bash",
-      "args": ["mcp/start-github-mcp.sh"]
+      "command": "node",
+      "args": ["mcp/start-github-mcp.js"]
     },
     "cloudflare": {
       "command": "bash",
