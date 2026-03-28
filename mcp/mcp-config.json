@@ -18,12 +18,8 @@
       "args": ["mcp/start-github-mcp.sh"]
     },
     "cloudflare": {
-      "command": "npx",
-      "args": ["-y", "@cloudflare/mcp-server-cloudflare"],
-      "env": {
-        "CLOUDFLARE_API_TOKEN": "${CLOUDFLARE_API_TOKEN}",
-        "CLOUDFLARE_ACCOUNT_ID": "${CLOUDFLARE_ACCOUNT_ID}"
-      }
+      "command": "bash",
+      "args": ["mcp/start-cloudflare-mcp.sh"]
     }
   }
 }

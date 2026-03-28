@@ -79,6 +79,7 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 ## Working in This Repo
 
 - Never commit secrets or `.env` files. Use `.env.example` as template.
+- **All credentials must live in `.env` only** — never hardcode tokens or passwords in `.claude/settings.json` or any other file. MCP servers must use wrapper scripts (e.g. `mcp/start-*.sh`) that source `.env` at startup.
 - `.claude/settings.json` is gitignored (contains tokens). Use `mcp/mcp-config.json` as template.
 - Each VPS folder has its own `docker-compose.yml` under `vps/<alias>/`.
 - When adding a new app: update `apps/registry.yml` AND the target VPS `docker-compose.yml`.
