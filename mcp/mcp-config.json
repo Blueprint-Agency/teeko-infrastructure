@@ -1,13 +1,6 @@
 {
   "_comment": "MCP Server Template — copy to .claude/settings.json. All secrets loaded from .env via wrapper scripts.",
   "mcpServers": {
-    "ssh-manager": {
-      "command": "npx",
-      "args": ["-y", "mcp-ssh-manager"],
-      "env": {
-        "SSH_CONFIG_PATH": "~/.ssh/config"
-      }
-    },
     "docker-staging": {
       "command": "bash",
       "args": ["mcp/start-docker-mcp.sh", "staging"]

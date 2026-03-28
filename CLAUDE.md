@@ -4,12 +4,14 @@ Central infrastructure-as-code repo. Manages all VPS, Docker deployments, CI/CD,
 
 ## MCP Servers Available
 
-Two MCP servers are configured in `.claude/settings.json`:
+The following MCP servers are configured in `.claude/settings.json`:
 
-1. **`ssh-manager`** — SSH access to all 3 VPS. Use this to run commands, manage Docker, read logs, monitor resources, and deploy.
-2. **`github`** — GitHub org + repo management. Use this to manage teams, repos, PRs, branch protection, and Actions secrets.
+- **`github`** — GitHub org + repo management. Use this to manage teams, repos, PRs, branch protection, and Actions secrets.
+- **`docker-staging`** / **`docker-prod-vps2`** / **`docker-prod-vps3`** — Docker access per VPS.
 
-## VPS Access (via ssh-manager)
+VPS access is via direct SSH (Bash). Use `ssh vps1-staging`, `ssh vps2-prod`, `ssh vps3-prod`.
+
+## VPS Access
 
 | SSH Alias | Role | Specs | Hostname |
 |-----------|------|-------|----------|
