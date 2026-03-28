@@ -25,28 +25,31 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 
 ## What's Running
 
-### VPS1 - Staging
-- `site-fe` / `site-be` / `site-db` — Teeko Site (staging)
-- `webapp-fe` / `webapp-be` / `webapp-db` — Teeko Webapp (staging)
-- `n8n-dev` / `n8n-db` — n8n development
-- `pgadmin` — Database admin UI
-- `nginx-proxy-manager` — Reverse proxy (migrating to Traefik)
+### VPS1 - Staging (stacks: traefik, website, webapp, n8n, monitoring, tools)
+- `traefik` — Reverse proxy + TLS (Let's Encrypt via Cloudflare DNS)
+- `website` stack: `site-fe` / `backend-site` / `db-site` — Teeko Site (staging.teeko.ai)
+- `webapp` stack: `webapp-fe` / `backend-webapp` / `db-webapp` — Teeko Webapp (staging)
+- `n8n` stack: `n8n-dev` / `db-n8n` — n8n development (stagingn8n.teeko.ai)
+- `monitoring` stack: Grafana / Prometheus / cAdvisor / Node Exporter
+- `tools` stack: `pgadmin` / `portainer` (stagingpg.teeko.ai)
 
-### VPS2 - Production
-- `site-fe` / `site-be` / `site-db` — Teeko Site (production)
-- `pgadmin` — Database admin UI
-- `nginx-proxy-manager` — Reverse proxy (migrating to Traefik)
+### VPS2 - Production (stacks: traefik, website, monitoring, tools)
+- `traefik` — Reverse proxy + TLS
+- `website` stack: `site-fe` / `backend-site` / `db-site` — Teeko Site (teeko.ai)
+- `monitoring` stack: Grafana / Prometheus / cAdvisor / Node Exporter
+- `tools` stack: `pgadmin` (pg.teeko.ai)
 
-### VPS3 - Production
-- `n8n-prod` / `n8n-db` — n8n production
-- `nginx-proxy-manager` — Reverse proxy (migrating to Traefik)
+### VPS3 - Production (stacks: traefik, n8n, monitoring)
+- `traefik` — Reverse proxy + TLS
+- `n8n` stack: `n8n-prod` / `db-n8n` — n8n production (n8n.teeko.ai)
+- `monitoring` stack: Grafana / Prometheus / cAdvisor / Node Exporter
 
 ## Architecture
 
 - **3 Hostinger VPS** managed via Docker Compose (no Kubernetes)
-- **Reverse proxy**: Nginx Proxy Manager (migrating to Traefik)
-- **Monitoring**: Grafana + Prometheus + cAdvisor + Node Exporter (not yet deployed)
-- **Container registry**: DockerHub (images: `chriskke/<app>:<tag>`)
+- **Reverse proxy**: Traefik (deployed on all 3 VPS, migration from Nginx Proxy Manager complete)
+- **Monitoring**: Grafana + Prometheus + cAdvisor + Node Exporter (deployed on all 3 VPS)
+- **Container registry**: DockerHub — website/webapp images: `blueprintagency/<app>:<tag>`
 - **Databases**: Local PostgreSQL per app (migrating to Supabase), n8n keeps local Postgres
 - **External services**: Supabase, Auth0, Stripe
 - **Timezone**: Asia/Kuala_Lumpur across all services

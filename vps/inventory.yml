@@ -1,51 +1,56 @@
 # VPS Inventory
-# Update IPs and specs after MCP SSH access is configured
+# IPs and credentials are in .env (never committed).
+# SSH aliases are defined in ~/.ssh/config.
 
 vps:
-  staging:
-    alias: vps1
-    host: "${VPS1_HOST}"  # See .env
+  vps1-staging:
+    ssh_alias: vps1-staging
+    host: "${VPS1_HOST}"   # See .env
     hostname: staging
-    user: "${VPS1_USER}"  # See .env
+    user: "${VPS1_USER}"   # See .env
     role: staging
     specs:
       cpu: "2 vCPU"
       ram: "8GB"
       disk: "100GB SSD"
-    services:
+    stacks:
       - traefik
-      - monitoring-stack
-      # App services added after migration audit
+      - website             # Teeko Site staging (staging.teeko.ai)
+      - webapp              # Teeko Webapp staging
+      - n8n                 # n8n dev (stagingn8n.teeko.ai)
+      - monitoring          # Grafana + Prometheus + cAdvisor + Node Exporter
+      - tools               # pgadmin (stagingpg.teeko.ai) + portainer
     notes: "Smallest VPS. All staging deploys land here."
 
-  prod-vps2:
-    alias: vps2
-    host: "${VPS2_HOST}"  # See .env
+  vps2-prod:
+    ssh_alias: vps2-prod
+    host: "${VPS2_HOST}"   # See .env
     hostname: prod1
-    user: "${VPS2_USER}"  # See .env
+    user: "${VPS2_USER}"   # See .env
     role: production
     specs:
       cpu: "4 vCPU"
       ram: "16GB"
       disk: "200GB SSD"
-    services:
+    stacks:
       - traefik
-      - monitoring-stack
-      # App services added after migration audit
-    notes: "Production. 4x resources of staging."
+      - website             # Teeko Site production (teeko.ai)
+      - monitoring          # Grafana + Prometheus + cAdvisor + Node Exporter
+      - tools               # pgadmin (pg.teeko.ai)
+    notes: "Production. Teeko Site only. 4x resources of staging."
 
-  prod-vps3:
-    alias: vps3
-    host: "${VPS3_HOST}"  # See .env
+  vps3-prod:
+    ssh_alias: vps3-prod
+    host: "${VPS3_HOST}"   # See .env
     hostname: prod2
-    user: "${VPS3_USER}"  # See .env
+    user: "${VPS3_USER}"   # See .env
     role: production
     specs:
       cpu: "4 vCPU"
       ram: "16GB"
       disk: "200GB SSD"
-    services:
+    stacks:
       - traefik
-      - monitoring-stack
-      # App services added after migration audit
-    notes: "Production. 4x resources of staging. Different apps than VPS2."
+      - n8n                 # n8n production (n8n.teeko.ai)
+      - monitoring          # Grafana + Prometheus + cAdvisor + Node Exporter
+    notes: "Production. n8n only. Isolated from site traffic."

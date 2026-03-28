@@ -1,90 +1,108 @@
 # App Registry
 # Central mapping of all apps to their repos, VPS targets, and configurations.
 # Update this file whenever adding/removing an app.
-# Audited from running containers on 2026-03-28.
+# Last updated: 2026-03-29
 
 apps:
   - name: teeko-site-fe
-    image: chriskke/teeko-site-fe
+    image: blueprintagency/teeko-website-fe
     tags:
       staging: staging
       production: latest
+    stack: website
     vps:
-      staging: staging       # VPS1
-      production: prod-vps2  # VPS2
-    port: 80
-    domain: "" # TODO: fill in domain
+      staging: vps1-staging
+      production: vps2-prod
+    port: 5000
+    domain:
+      staging: staging.teeko.ai
+      production: teeko.ai
     db: local-postgres       # TODO: migrate to Supabase
     notes: "Teeko site frontend (Next.js)"
 
   - name: teeko-site-be
-    image: chriskke/teeko-site-be
+    image: blueprintagency/teeko-website-be
     tags:
       staging: staging
       production: latest
+    stack: website
     vps:
-      staging: staging
-      production: prod-vps2
+      staging: vps1-staging
+      production: vps2-prod
     port: 3000
-    domain: "" # TODO: fill in domain
+    domain:
+      staging: stagingapi.teeko.ai
+      production: api.teeko.ai
     db: local-postgres       # TODO: migrate to Supabase
     notes: "Teeko site backend (Node.js)"
 
   - name: teeko-webapp-fe
-    image: chriskke/teeko-webapp-fe
+    image: chriskke/teeko-webapp-fe   # TODO: move to blueprintagency org
     tags:
       staging: staging
-      production: "" # TODO: not yet on production
+      production: ""          # not yet on production
+    stack: webapp
     vps:
-      staging: staging
-      production: "" # TODO: assign VPS when ready
+      staging: vps1-staging
+      production: ""          # TODO: assign VPS when ready
     port: 5173
-    domain: "" # TODO: fill in domain
+    domain:
+      staging: ""             # TODO: fill in domain
     db: null
-    notes: "Teeko webapp frontend (Next.js). Currently staging only."
+    notes: "Teeko webapp frontend (Next.js). Staging only."
 
   - name: teeko-webapp-be
-    image: chriskke/teeko-webapp-be
+    image: chriskke/teeko-webapp-be   # TODO: move to blueprintagency org
     tags:
       staging: staging
-      production: "" # TODO: not yet on production
+      production: ""          # not yet on production
+    stack: webapp
     vps:
-      staging: staging
-      production: "" # TODO: assign VPS when ready
+      staging: vps1-staging
+      production: ""          # TODO: assign VPS when ready
     port: 3000
-    domain: "" # TODO: fill in domain
+    domain:
+      staging: ""             # TODO: fill in domain
     db: local-postgres       # TODO: migrate to Supabase
-    notes: "Teeko webapp backend (Node.js). Currently staging only."
+    notes: "Teeko webapp backend (Node.js). Staging only."
 
 n8n_instances:
   - name: n8n-dev
     image: n8nio/n8n:latest
+    stack: n8n
     vps:
-      staging: staging       # VPS1
+      staging: vps1-staging
     port: 5678
-    domain: "" # TODO: fill in domain
+    domain:
+      staging: stagingn8n.teeko.ai
     db: local-postgres       # n8n requires local Postgres, not Supabase
     notes: "n8n development/staging instance"
 
   - name: n8n-prod
     image: n8nio/n8n:latest
+    stack: n8n
     vps:
-      production: prod-vps3  # VPS3
+      production: vps3-prod
     port: 5678
-    domain: "" # TODO: fill in domain
+    domain:
+      production: n8n.teeko.ai
     db: local-postgres       # n8n requires local Postgres, not Supabase
     notes: "n8n production instance"
 
 tools:
   - name: pgadmin
     image: dpage/pgadmin4:latest
+    stack: tools
     vps:
-      - staging       # VPS1
-      - prod-vps2     # VPS2
+      - vps1-staging          # stagingpg.teeko.ai
+      - vps2-prod             # pg.teeko.ai
     port: 80
+    domain:
+      staging: stagingpg.teeko.ai
+      production: pg.teeko.ai
     notes: "Database admin UI. Keep until Supabase migration is complete."
 
-# To be removed during migration:
+# Already removed (migration complete):
 # - portainer / portainer_agent (replaced by Claude Code + MCP)
 # - watchtower (replaced by GHA-triggered deploys)
-# - nginx-proxy-manager (replaced by Traefik)
+# - nginx-proxy-manager (replaced by Traefik on all 3 VPS)

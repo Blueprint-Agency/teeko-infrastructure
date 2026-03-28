@@ -35,18 +35,17 @@ Developer → push to staging/main → GitHub Actions (CI) → DockerHub
 ## Repository Structure
 
 ```
-├── .github/workflows/     GitHub Actions deploy workflows
-├── mcp/                   MCP server configs for Claude Code
+├── .github/workflows/
+│   └── deploy-infra.yml   Path-triggered deploy (vps/** changes → SSH deploy)
+├── mcp/                   MCP server configs + one-time setup scripts
 ├── vps/
 │   ├── inventory.yml      VPS inventory (IPs, specs, roles)
-│   ├── staging/           VPS1 - docker-compose + Traefik config
-│   ├── prod-vps2/         VPS2 - docker-compose + Traefik config
-│   ├── prod-vps3/         VPS3 - docker-compose + Traefik config
+│   ├── vps1-staging/stacks/   Per-stack compose files for VPS1
+│   ├── vps2-prod/stacks/      Per-stack compose files for VPS2
+│   ├── vps3-prod/stacks/      Per-stack compose files for VPS3
 │   └── shared/            Deploy scripts, healthcheck, VPS setup
-├── monitoring/            Grafana dashboards, Prometheus config, alert rules
 ├── github/                Org settings, team roles, repo standards
 ├── apps/                  App registry (name → VPS → ports → domains)
-├── scripts/               Rollback, backup scripts
 └── docs/                  Architecture diagrams, deploy/rollback runbooks
 ```
 
@@ -74,17 +73,16 @@ With MCP servers configured, Claude Code can:
 ### Manual Operations
 
 ```bash
-# Deploy a specific app
-./vps/shared/deploy.sh staging my-app
+# SSH to a VPS
+ssh vps1-staging   # staging
+ssh vps2-prod      # production
+ssh vps3-prod      # production (n8n)
+
+# Deploy a stack manually on VPS
+cd /root/stacks/<stack> && docker compose up -d
 
 # Health check
-./vps/shared/healthcheck.sh staging
-
-# Rollback
-./scripts/rollback.sh prod-vps2 my-app
-
-# Backup volumes
-./scripts/backup.sh staging
+./vps/shared/healthcheck.sh vps1-staging
 ```
 
 ## Team
