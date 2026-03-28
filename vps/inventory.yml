@@ -1,0 +1,51 @@
+# VPS Inventory
+# Update IPs and specs after MCP SSH access is configured
+
+vps:
+  staging:
+    alias: vps1
+    host: "${VPS1_HOST}"  # See .env
+    hostname: staging
+    user: "${VPS1_USER}"  # See .env
+    role: staging
+    specs:
+      cpu: "2 vCPU"
+      ram: "8GB"
+      disk: "100GB SSD"
+    services:
+      - traefik
+      - monitoring-stack
+      # App services added after migration audit
+    notes: "Smallest VPS. All staging deploys land here."
+
+  prod-vps2:
+    alias: vps2
+    host: "${VPS2_HOST}"  # See .env
+    hostname: prod1
+    user: "${VPS2_USER}"  # See .env
+    role: production
+    specs:
+      cpu: "4 vCPU"
+      ram: "16GB"
+      disk: "200GB SSD"
+    services:
+      - traefik
+      - monitoring-stack
+      # App services added after migration audit
+    notes: "Production. 4x resources of staging."
+
+  prod-vps3:
+    alias: vps3
+    host: "${VPS3_HOST}"  # See .env
+    hostname: prod2
+    user: "${VPS3_USER}"  # See .env
+    role: production
+    specs:
+      cpu: "4 vCPU"
+      ram: "16GB"
+      disk: "200GB SSD"
+    services:
+      - traefik
+      - monitoring-stack
+      # App services added after migration audit
+    notes: "Production. 4x resources of staging. Different apps than VPS2."

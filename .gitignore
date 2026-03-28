@@ -1,0 +1,35 @@
+# Environment files (secrets)
+.env
+*.env.local
+*.env.production
+*.env.staging
+
+# Claude Code local settings (contains tokens)
+.claude/
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Grafana data (generated at runtime)
+monitoring/grafana/data/
+
+# Prometheus data (generated at runtime)
+monitoring/prometheus/data/
+
+# Loki data
+monitoring/loki/data/
+
+# Terraform (if added later)
+*.tfstate
+*.tfstate.backup
+.terraform/

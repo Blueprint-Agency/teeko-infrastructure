@@ -1,0 +1,31 @@
+# Repository Standards
+# Conventions that all monorepos in the org should follow.
+
+conventions:
+  branching:
+    main: "Production-ready code. Deploys to VPS2/VPS3."
+    staging: "Staging/QA. Deploys to VPS1."
+    feature: "feature/<description> — branched from staging"
+    hotfix: "hotfix/<description> — branched from main"
+
+  docker:
+    image_naming: "<org>/<app-name>"
+    tag_strategy:
+      staging: "staging-<short-sha>"
+      production: "<semver>"  # e.g., 1.2.3
+      latest: "Only used on main branch builds"
+
+  ci_cd:
+    required_in_monorepo:
+      - Dockerfile at app root
+      - .github/workflows/ci.yml (build + test + push image)
+      - .github/workflows/deploy.yml (trigger infra repo deploy workflow)
+    secrets_required:
+      - DOCKERHUB_USERNAME
+      - DOCKERHUB_TOKEN
+      - INFRA_REPO_PAT  # Personal Access Token to trigger infra repo workflows
+
+  code_quality:
+    - ESLint for all JS/TS
+    - Prettier for formatting
+    - TypeScript strict mode

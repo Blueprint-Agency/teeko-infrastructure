@@ -1,0 +1,69 @@
+# VPS1 - Staging Environment
+# All staging services run here.
+# Apps are deployed via GHA when pushing to the staging branch.
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-letsencrypt:/letsencrypt
+    labels:
+      - "traefik.enable=true"
+      # Dashboard (optional, protected by basic auth)
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+      # HTTP to HTTPS redirect
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`.+`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+    networks:
+      - proxy
+
+  # ======================================
+  # App services go below.
+  # After MCP audit, we'll add each app like:
+  # ======================================
+  #
+  # my-app:
+  #   image: dockerhub-user/my-app:staging
+  #   container_name: my-app-staging
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.my-app.rule=Host(`my-app.staging.${BASE_DOMAIN}`)"
+  #     - "traefik.http.routers.my-app.entrypoints=websecure"
+  #     - "traefik.http.routers.my-app.tls.certresolver=letsencrypt"
+  #     - "traefik.http.services.my-app.loadbalancer.server.port=3000"
+  #   networks:
+  #     - proxy
+
+volumes:
+  traefik-letsencrypt:
+
+networks:
+  proxy:
+    name: proxy
+    driver: bridge
