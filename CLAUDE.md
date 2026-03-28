@@ -92,9 +92,9 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 - [x] Container audit complete
 - [x] App registry populated
 - [x] Nginx Proxy Manager → Traefik migration (VPS1 staging docker-compose updated)
-- [ ] Deploy Traefik on VPS1 (cut over from nginx-proxy-manager)
+- [x] Deploy Traefik on VPS1 (cut over from nginx-proxy-manager)
+- [x] Deploy monitoring stack (Grafana + Prometheus + cAdvisor + Node Exporter) on VPS1
 - [ ] Nginx Proxy Manager → Traefik migration (VPS2, VPS3)
 - [ ] Remove Portainer + Watchtower
-- [ ] Deploy monitoring stack (Grafana + Prometheus)
 - [ ] Wire up GHA deploy workflows in monorepos
 - [ ] Migrate local Postgres → Supabase
