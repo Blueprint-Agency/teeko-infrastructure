@@ -1,6 +1,6 @@
 # VPS1 - Staging Environment
-# All staging services run here.
-# Apps are deployed via GHA when pushing to the staging branch.
+# Traefik handles reverse proxy + TLS via Cloudflare DNS challenge.
+# All services on the 'proxy' network. DBs use existing named volumes.
 
 services:
 
@@ -18,14 +18,17 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--log.level=INFO"
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-letsencrypt:/letsencrypt
@@ -53,7 +56,7 @@ services:
     image: chriskke/teeko-site-fe:staging
     container_name: site-fe
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.site-fe
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.site-fe.rule=Host(`staging.${BASE_DOMAIN}`)"
@@ -67,7 +70,7 @@ services:
     image: chriskke/teeko-site-be:staging
     container_name: site-be
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.site-be
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.site-be.rule=Host(`stagingapi.${BASE_DOMAIN}`)"
@@ -77,13 +80,14 @@ services:
     networks:
       - proxy
 
-  site-db:
+  # NOTE: service named 'db-site' so site-be can reach it as DB_HOST=db-site
+  db-site:
     image: postgres:alpine
     container_name: site-db
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.site-db
     volumes:
-      - site-db-data:/var/lib/postgresql/data
+      - teeko-website-db:/var/lib/postgresql
     networks:
       - proxy
 
@@ -95,7 +99,7 @@ services:
     image: chriskke/teeko-webapp-fe:staging
     container_name: webapp-fe
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.webapp-fe
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.webapp-fe.rule=Host(`stagingapp.${BASE_DOMAIN}`)"
@@ -109,23 +113,23 @@ services:
     image: chriskke/teeko-webapp-be:staging
     container_name: webapp-be
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.webapp-be
+    networks:
+      - proxy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.webapp-be.rule=Host(`stagingappapi.${BASE_DOMAIN}`)"
       - "traefik.http.routers.webapp-be.entrypoints=websecure"
       - "traefik.http.routers.webapp-be.tls.certresolver=letsencrypt"
       - "traefik.http.services.webapp-be.loadbalancer.server.port=3000"
-    networks:
-      - proxy
 
   webapp-db:
     image: postgres:alpine
     container_name: webapp-db
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.webapp-db
     volumes:
-      - webapp-db-data:/var/lib/postgresql/data
+      - teeko-webapp-db:/var/lib/postgresql
     networks:
       - proxy
 
@@ -137,7 +141,9 @@ services:
     image: n8nio/n8n:latest
     container_name: n8n-dev
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.n8n-dev
+    volumes:
+      - n8n-data:/home/node/.n8n
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.n8n-dev.rule=Host(`stagingn8n.${BASE_DOMAIN}`)"
@@ -147,13 +153,14 @@ services:
     networks:
       - proxy
 
-  n8n-db:
+  # NOTE: service named 'db-n8n' so n8n-dev can reach it as DB_POSTGRESDB_HOST=db-n8n
+  db-n8n:
     image: postgres:alpine
     container_name: n8n-db
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.db-n8n
     volumes:
-      - n8n-db-data:/var/lib/postgresql/data
+      - n8n_pgdata:/var/lib/postgresql
     networks:
       - proxy
 
@@ -165,7 +172,9 @@ services:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
     restart: unless-stopped
-    env_file: .env
+    env_file: .env.pgadmin
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pgadmin.rule=Host(`stagingpg.${BASE_DOMAIN}`)"
@@ -182,7 +191,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - portainer-data:/data
+      - portainer_data:/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.portainer.rule=Host(`port.${BASE_DOMAIN}`)"
@@ -192,12 +201,91 @@ services:
     networks:
       - proxy
 
+  # ======================================
+  # Monitoring
+  # ======================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - proxy
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=grafana.${BASE_DOMAIN}
+      - GF_SERVER_ROOT_URL=https://grafana.${BASE_DOMAIN}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/snap/docker/common/var-lib-docker:/var/lib/docker:ro
+    networks:
+      - proxy
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    networks:
+      - proxy
+
 volumes:
   traefik-letsencrypt:
-  site-db-data:
-  webapp-db-data:
-  n8n-db-data:
-  portainer-data:
+  # Existing DB volumes — do NOT recreate, data already here
+  teeko-website-db:
+    external: true
+  teeko-webapp-db:
+    external: true
+  n8n_pgdata:
+    external: true
+  n8n-data:
+    external: true
+  pgadmin-data:
+    external: true
+  portainer_data:
+    external: true
+  # New monitoring volumes
+  prometheus-data:
+  grafana-data:
 
 networks:
   proxy:
