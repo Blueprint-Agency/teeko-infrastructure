@@ -1,0 +1,50 @@
+services:
+  site-fe:
+    image: blueprintagency/teeko-website-fe:latest
+    container_name: site-fe
+    restart: unless-stopped
+    env_file: .env.site-fe
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.site-fe.rule=Host(`${BASE_DOMAIN}`) || Host(`www.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.site-fe.entrypoints=websecure"
+      - "traefik.http.routers.site-fe.tls.certresolver=letsencrypt"
+      - "traefik.http.services.site-fe.loadbalancer.server.port=5000"
+    networks:
+      - proxy
+
+  # NOTE: service named 'backend-site' so site-fe can reach it as BACKEND_URL=http://backend-site:3000
+  backend-site:
+    image: blueprintagency/teeko-website-be:latest
+    container_name: site-be
+    restart: unless-stopped
+    env_file: .env.site-be
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.site-be.rule=Host(`api.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.site-be.entrypoints=websecure"
+      - "traefik.http.routers.site-be.tls.certresolver=letsencrypt"
+      - "traefik.http.services.site-be.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+
+  # NOTE: service named 'db-site' so site-be can reach it as DB_HOST=db-site
+  # .env.site-db shares the same credentials as .env.site-be (DB_USER/DB_PASSWORD/DB_NAME).
+  # In the website CI/CD, generate .env.site-db from the same DB_* secrets — no separate secret needed.
+  db-site:
+    image: postgres:alpine
+    container_name: site-db
+    restart: unless-stopped
+    env_file: .env.site-db
+    volumes:
+      - teeko-website-db:/var/lib/postgresql
+    networks:
+      - proxy
+
+volumes:
+  teeko-website-db:
+    external: true
+
+networks:
+  proxy:
+    external: true

@@ -1,0 +1,46 @@
+services:
+  webapp-fe:
+    image: chriskke/teeko-webapp-fe:staging
+    container_name: webapp-fe
+    restart: unless-stopped
+    env_file: .env.webapp-fe
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webapp-fe.rule=Host(`stagingapp.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.webapp-fe.entrypoints=websecure"
+      - "traefik.http.routers.webapp-fe.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webapp-fe.loadbalancer.server.port=5173"
+    networks:
+      - proxy
+
+  webapp-be:
+    image: chriskke/teeko-webapp-be:staging
+    container_name: webapp-be
+    restart: unless-stopped
+    env_file: .env.webapp-be
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webapp-be.rule=Host(`stagingappapi.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.webapp-be.entrypoints=websecure"
+      - "traefik.http.routers.webapp-be.tls.certresolver=letsencrypt"
+      - "traefik.http.services.webapp-be.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+
+  webapp-db:
+    image: postgres:alpine
+    container_name: webapp-db
+    restart: unless-stopped
+    env_file: .env.webapp-db
+    volumes:
+      - teeko-webapp-db:/var/lib/postgresql
+    networks:
+      - proxy
+
+volumes:
+  teeko-webapp-db:
+    external: true
+
+networks:
+  proxy:
+    external: true

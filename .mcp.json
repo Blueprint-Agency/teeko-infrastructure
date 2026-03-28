@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cloudflare": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp"
+    },
+    "github": {
+      "command": "node",
+      "args": ["mcp/start-github-mcp.js"]
+    }
+  }
+}

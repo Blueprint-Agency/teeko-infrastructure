@@ -1,0 +1,37 @@
+services:
+  n8n-dev:
+    image: n8nio/n8n:latest
+    container_name: n8n-dev
+    restart: unless-stopped
+    env_file: .env.n8n-dev
+    volumes:
+      - n8n-data:/home/node/.n8n
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n-dev.rule=Host(`stagingn8n.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.n8n-dev.entrypoints=websecure"
+      - "traefik.http.routers.n8n-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.services.n8n-dev.loadbalancer.server.port=5678"
+    networks:
+      - proxy
+
+  # NOTE: service named 'db-n8n' so n8n-dev can reach it as DB_POSTGRESDB_HOST=db-n8n
+  db-n8n:
+    image: postgres:alpine
+    container_name: n8n-db
+    restart: unless-stopped
+    env_file: .env.db-n8n
+    volumes:
+      - n8n_pgdata:/var/lib/postgresql
+    networks:
+      - proxy
+
+volumes:
+  n8n-data:
+    external: true
+  n8n_pgdata:
+    external: true
+
+networks:
+  proxy:
+    external: true

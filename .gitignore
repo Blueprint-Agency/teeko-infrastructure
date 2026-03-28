@@ -33,3 +33,7 @@ monitoring/loki/data/
 *.tfstate
 *.tfstate.backup
 .terraform/
+
+# Node (mcp scripts)
+node_modules/
+package-lock.json

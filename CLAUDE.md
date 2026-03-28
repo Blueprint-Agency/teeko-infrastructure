@@ -6,7 +6,7 @@ Central infrastructure-as-code repo. Manages all VPS, Docker deployments, CI/CD,
 
 The following MCP servers are configured in `.claude/settings.json`:
 
-- **`github`** — GitHub org + repo management. Use this to manage teams, repos, PRs, branch protection, and Actions secrets.
+- **`github`** — GitHub org + repo management. Use `mcp__github__*` tools for: pushing files, managing PRs/issues/branches, reading repo content. **Does NOT cover**: environments, secrets, or variables — those require direct GitHub REST API calls (use curl + libsodium encryption for secrets, or a Node.js helper script).
 - **`docker-staging`** / **`docker-prod-vps2`** / **`docker-prod-vps3`** — Docker access per VPS.
 
 VPS access is via direct SSH (Bash). Use `ssh vps1-staging`, `ssh vps2-prod`, `ssh vps3-prod`.
@@ -67,6 +67,11 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 - `mcp/mcp-config.json` — MCP server template (copy to `.claude/settings.json`)
 - `.env.example` — Required environment variables template
 
+## GitHub Organization
+
+- **Org**: [Blueprint-Agency](https://github.com/Blueprint-Agency)
+- Repos live under `Blueprint-Agency/<repo-name>`
+
 ## Team
 
 - **@chriskke** — DevOps lead (sole devops), admin on all VPS and GitHub org
@@ -81,9 +86,14 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 - Never commit secrets or `.env` files. Use `.env.example` as template.
 - **All credentials must live in `.env` only** — never hardcode tokens or passwords in `.claude/settings.json` or any other file. MCP servers must use wrapper scripts (e.g. `mcp/start-*.sh`) that source `.env` at startup.
 - `.claude/settings.json` is gitignored (contains tokens). Use `mcp/mcp-config.json` as template.
-- Each VPS folder has its own `docker-compose.yml` under `vps/<alias>/`.
+- Each VPS uses a **stacks/** layout: `vps/<alias>/stacks/<stack>/docker-compose.yml`. Each stack is an independent Portainer stack.
+- Stack locations on VPS: `/root/stacks/<stack>/` (e.g. `cd /root/stacks/website && docker compose up -d`)
+- VPS1 stacks: `traefik`, `website`, `webapp`, `n8n`, `monitoring`, `tools` (pgadmin + portainer)
+- VPS2 stacks: `traefik`, `website`, `monitoring`, `tools` (pgadmin)
+- VPS3 stacks: `traefik`, `n8n`, `monitoring`
+- Each stack directory contains its own `.env` (shared vars: BASE_DOMAIN, ACME_EMAIL, etc.) and per-service `.env.*` files.
 - **Docker 29.x on VPS2/VPS3**: These VPS run Docker 29.1.3 which raises `MinAPIVersion` to 1.44. Traefik's Docker provider negotiates from 1.24 and gets rejected. Fix applied via `/etc/systemd/system/docker.service.d/min-api.conf` (`DOCKER_MIN_API_VERSION=1.24`) on each VPS. Must reapply if Docker is reinstalled.
-- When adding a new app: update `apps/registry.yml` AND the target VPS `docker-compose.yml`.
+- When adding a new app: update `apps/registry.yml`, add/update the target VPS stack compose file, and add GitHub environment secrets/vars.
 - Shared deploy/healthcheck/setup scripts are in `vps/shared/`.
 
 ## Migration Status
@@ -98,6 +108,6 @@ To SSH manually: `ssh vps1-staging` (uses ~/.ssh/config aliases)
 - [x] Nginx Proxy Manager → Traefik migration (VPS2, VPS3)
 - [x] Deploy Traefik + monitoring stack (Grafana + Prometheus + cAdvisor + Node Exporter) on VPS2, VPS3
 - [x] Remove Watchtower (VPS2 — dropped from compose)
-- [ ] Remove Portainer (VPS1)
-- [ ] Wire up GHA deploy workflows in monorepos
+- [x] Split monolithic compose into per-stack compose files across all 3 VPS
+- [x] Wire up GHA deploy workflows in monorepos (teeko-website)
 - [ ] Migrate local Postgres → Supabase

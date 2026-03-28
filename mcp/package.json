@@ -1,0 +1,16 @@
+{
+  "name": "mcp",
+  "version": "1.0.0",
+  "description": "This folder contains the MCP (Model Context Protocol) server configs that allow Claude Code to manage the VPS infrastructure.",
+  "main": "start-github-mcp.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "tweetsodium": "^0.0.4"
+  }
+}
