@@ -4,6 +4,9 @@ services:
     container_name: n8n-dev
     restart: unless-stopped
     env_file: .env.n8n-dev
+    # n8n must start after its postgres — crashes on startup if db-n8n isn't ready
+    depends_on:
+      - db-n8n
     volumes:
       - n8n-data:/home/node/.n8n
     labels:

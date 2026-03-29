@@ -18,6 +18,9 @@ services:
     container_name: webapp-be
     restart: unless-stopped
     env_file: .env.webapp-be
+    # backend connects to postgres at startup — must wait for webapp-db
+    depends_on:
+      - webapp-db
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.webapp-be.rule=Host(`stagingappapi.${BASE_DOMAIN}`)"

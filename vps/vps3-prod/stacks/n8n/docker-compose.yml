@@ -1,9 +1,13 @@
 services:
   n8n-prod:
     image: n8nio/n8n:latest
+    pull_policy: always
     container_name: n8n-prod
     restart: unless-stopped
     env_file: .env.n8n-prod
+    # n8n must start after its postgres — crashes on startup if db-n8n isn't ready
+    depends_on:
+      - db-n8n
     volumes:
       - n8n-data:/home/node/.n8n
     labels:
@@ -26,11 +30,23 @@ services:
     networks:
       - proxy
 
+  # Postgres for WABA workflow data (users + flight_reminder tables)
+  db-waba:
+    image: postgres:alpine
+    container_name: waba-db
+    restart: unless-stopped
+    env_file: .env.db-waba
+    volumes:
+      - waba_pgdata:/var/lib/postgresql/data
+    networks:
+      - proxy
+
 volumes:
   n8n-data:
     external: true
   n8n_pgdata:
     external: true
+  waba_pgdata:
 
 networks:
   proxy:

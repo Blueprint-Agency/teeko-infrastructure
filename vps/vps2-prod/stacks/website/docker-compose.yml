@@ -19,6 +19,9 @@ services:
     container_name: site-be
     restart: unless-stopped
     env_file: .env.site-be
+    # backend connects to postgres at startup — must wait for db-site
+    depends_on:
+      - db-site
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.site-be.rule=Host(`api.${BASE_DOMAIN}`)"

@@ -7,6 +7,9 @@
 # Claude Code local settings (contains tokens)
 .claude/
 
+# MCP config (contains tokens — use .mcp.json.example as template)
+.mcp.json
+
 # SSH keys
 *.pem
 *.key
@@ -34,6 +37,6 @@ monitoring/loki/data/
 *.tfstate.backup
 .terraform/
 
-# Node (mcp scripts)
+# Node
 node_modules/
 package-lock.json

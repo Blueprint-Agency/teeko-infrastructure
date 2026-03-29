@@ -1,8 +1,16 @@
 name: Deploy Infrastructure Stacks
 
-# Triggered by changes to any VPS stack directory.
-# website/webapp stacks are excluded — those have their own CI/CD in their repos.
-# Secrets live in GitHub Environments (vps1-staging, vps2-prod, vps3-prod).
+# Repo is source of truth for all stacks.
+# On push to main:
+#   - Stack folder present + changed  → deploy / update on VPS
+#   - Stack folder deleted from repo  → docker compose down + remove from VPS
+#
+# Excluded from automation (managed by their own repo CI/CD):
+#   VPS1: website, webapp
+#   VPS2: website
+#   VPS3: (nothing excluded)
+#
+# Secrets live in GitHub Environments: vps1-staging, vps2-prod, vps3-prod
 
 on:
   push:
@@ -28,7 +36,6 @@ jobs:
         run: |
           BEFORE="${{ github.event.before }}"
           SHA="${{ github.sha }}"
-          # Handle first push (empty before SHA)
           if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
             DIFF=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
           else
@@ -38,7 +45,7 @@ jobs:
           echo "vps2=$(echo "$DIFF" | grep -qE '^vps/vps2-prod/'    && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "vps3=$(echo "$DIFF" | grep -qE '^vps/vps3-prod/'    && echo true || echo false)" >> $GITHUB_OUTPUT
 
-  # ── VPS1 Staging: traefik, monitoring, n8n, tools ────────────────────────────
+  # ── VPS1 Staging ─────────────────────────────────────────────────────────────
   deploy-vps1:
     needs: detect
     if: needs.detect.outputs.vps1 == 'true'
@@ -56,7 +63,7 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Detect changed infra stacks
+      - name: Detect stacks to deploy and remove
         id: stacks
         run: |
           BEFORE="${{ github.event.before }}"
@@ -66,16 +73,25 @@ jobs:
           else
             DIFF=$(git diff --name-only "$BEFORE" "$SHA")
           fi
-          ALL=$(echo "$DIFF" | grep '^vps/vps1-staging/stacks/' \
-            | sed 's|vps/vps1-staging/stacks/||;s|/.*||' | sort -u | tr '\n' ' ')
-          # website/webapp handled by their own repo CI/CD — skip them here
-          FILTERED=$(echo "$ALL" | tr ' ' '\n' \
-            | grep -xE 'traefik|monitoring|n8n|tools' | tr '\n' ' ')
-          echo "changed=$FILTERED" >> $GITHUB_OUTPUT
-          echo "Stacks to deploy: $FILTERED"
+          EXCLUDE='website|webapp'
+          ALL_TOUCHED=$(echo "$DIFF" | grep '^vps/vps1-staging/stacks/' \
+            | sed 's|vps/vps1-staging/stacks/||;s|/.*||' | sort -u \
+            | grep -vxE "$EXCLUDE" || true)
+          DEPLOY="" REMOVE=""
+          for stack in $ALL_TOUCHED; do
+            if [ -d "vps/vps1-staging/stacks/$stack" ]; then
+              DEPLOY="$DEPLOY $stack"
+            else
+              REMOVE="$REMOVE $stack"
+            fi
+          done
+          DEPLOY=$(echo $DEPLOY | xargs); REMOVE=$(echo $REMOVE | xargs)
+          echo "deploy=$DEPLOY" >> $GITHUB_OUTPUT
+          echo "remove=$REMOVE" >> $GITHUB_OUTPUT
+          echo "Deploy: $DEPLOY | Remove: $REMOVE"
 
       - name: Sync compose files
-        if: steps.stacks.outputs.changed != ''
+        if: steps.stacks.outputs.deploy != ''
         run: |
           rsync -rltz \
             --exclude='.env' --exclude='.env.*' \
@@ -83,14 +99,13 @@ jobs:
             vps/vps1-staging/stacks/ \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/stacks/"
 
-      - name: Write env files and deploy
-        if: steps.stacks.outputs.changed != ''
+      - name: Deploy and remove stacks
+        if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
           BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
           TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           PGADMIN_DEFAULT_EMAIL: ${{ vars.PGADMIN_DEFAULT_EMAIL }}
           PGADMIN_DEFAULT_PASSWORD: ${{ secrets.PGADMIN_DEFAULT_PASSWORD }}
           N8N_DB_USER: ${{ vars.N8N_DB_USER }}
@@ -99,13 +114,13 @@ jobs:
           N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
           N8N_EDITOR_BASE_URL: ${{ vars.N8N_EDITOR_BASE_URL }}
           N8N_WEBHOOK_URL: ${{ vars.N8N_WEBHOOK_URL }}
-          STACKS: ${{ steps.stacks.outputs.changed }}
+          DEPLOY: ${{ steps.stacks.outputs.deploy }}
+          REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
-          # $ → $$ for docker compose .env interpolation (avoids unintended var expansion)
           ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
 
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGRAFANA_ADMIN_PASSWORD=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GRAFANA_ADMIN_PASSWORD" | base64 -w0)
+          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' \
+            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" | base64 -w0)
 
           PGADMIN_ENV=$(printf 'PGADMIN_DEFAULT_EMAIL=%s\nPGADMIN_DEFAULT_PASSWORD=%s\nPGADMIN_CONFIG_SERVER_MODE=True\nPGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=False\n' \
             "$PGADMIN_DEFAULT_EMAIL" "$PGADMIN_DEFAULT_PASSWORD" | base64 -w0)
@@ -126,13 +141,14 @@ jobs:
 
           ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "
           set -e
-          STACKS='$STACKS'
+          DEPLOY='$DEPLOY'
+          REMOVE='$REMOVE'
           BASE_ENV='$BASE_ENV'
           PGADMIN_ENV='$PGADMIN_ENV'
           N8N_APP_ENV='$N8N_APP_ENV'
           N8N_DB_ENV='$N8N_DB_ENV'
 
-          for stack in \$STACKS; do
+          for stack in \$DEPLOY; do
             echo '=== Deploying '\$stack' ==='
             mkdir -p /root/stacks/\$stack
             echo \"\$BASE_ENV\" | base64 -d > /root/stacks/\$stack/.env
@@ -147,9 +163,18 @@ jobs:
             docker compose up -d --remove-orphans
             echo '=== '\$stack' done ==='
           done
+
+          for stack in \$REMOVE; do
+            echo '=== Removing '\$stack' ==='
+            if [ -d /root/stacks/\$stack ]; then
+              cd /root/stacks/\$stack && docker compose down --remove-orphans
+              rm -rf /root/stacks/\$stack
+            fi
+            echo '=== '\$stack' removed ==='
+          done
           "
 
-  # ── VPS2 Production: traefik, monitoring, tools ───────────────────────────────
+  # ── VPS2 Production ───────────────────────────────────────────────────────────
   deploy-vps2:
     needs: detect
     if: needs.detect.outputs.vps2 == 'true'
@@ -167,7 +192,7 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Detect changed infra stacks
+      - name: Detect stacks to deploy and remove
         id: stacks
         run: |
           BEFORE="${{ github.event.before }}"
@@ -177,15 +202,25 @@ jobs:
           else
             DIFF=$(git diff --name-only "$BEFORE" "$SHA")
           fi
-          ALL=$(echo "$DIFF" | grep '^vps/vps2-prod/stacks/' \
-            | sed 's|vps/vps2-prod/stacks/||;s|/.*||' | sort -u | tr '\n' ' ')
-          FILTERED=$(echo "$ALL" | tr ' ' '\n' \
-            | grep -xE 'traefik|monitoring|tools' | tr '\n' ' ')
-          echo "changed=$FILTERED" >> $GITHUB_OUTPUT
-          echo "Stacks to deploy: $FILTERED"
+          EXCLUDE='website'
+          ALL_TOUCHED=$(echo "$DIFF" | grep '^vps/vps2-prod/stacks/' \
+            | sed 's|vps/vps2-prod/stacks/||;s|/.*||' | sort -u \
+            | grep -vxE "$EXCLUDE" || true)
+          DEPLOY="" REMOVE=""
+          for stack in $ALL_TOUCHED; do
+            if [ -d "vps/vps2-prod/stacks/$stack" ]; then
+              DEPLOY="$DEPLOY $stack"
+            else
+              REMOVE="$REMOVE $stack"
+            fi
+          done
+          DEPLOY=$(echo $DEPLOY | xargs); REMOVE=$(echo $REMOVE | xargs)
+          echo "deploy=$DEPLOY" >> $GITHUB_OUTPUT
+          echo "remove=$REMOVE" >> $GITHUB_OUTPUT
+          echo "Deploy: $DEPLOY | Remove: $REMOVE"
 
       - name: Sync compose files
-        if: steps.stacks.outputs.changed != ''
+        if: steps.stacks.outputs.deploy != ''
         run: |
           rsync -rltz \
             --exclude='.env' --exclude='.env.*' \
@@ -193,33 +228,34 @@ jobs:
             vps/vps2-prod/stacks/ \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/stacks/"
 
-      - name: Write env files and deploy
-        if: steps.stacks.outputs.changed != ''
+      - name: Deploy and remove stacks
+        if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
           BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
           TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           PGADMIN_DEFAULT_EMAIL: ${{ vars.PGADMIN_DEFAULT_EMAIL }}
           PGADMIN_DEFAULT_PASSWORD: ${{ secrets.PGADMIN_DEFAULT_PASSWORD }}
-          STACKS: ${{ steps.stacks.outputs.changed }}
+          DEPLOY: ${{ steps.stacks.outputs.deploy }}
+          REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
           ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
 
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGRAFANA_ADMIN_PASSWORD=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GRAFANA_ADMIN_PASSWORD" | base64 -w0)
+          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' \
+            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" | base64 -w0)
 
           PGADMIN_ENV=$(printf 'PGADMIN_DEFAULT_EMAIL=%s\nPGADMIN_DEFAULT_PASSWORD=%s\nPGADMIN_CONFIG_SERVER_MODE=True\nPGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=False\n' \
             "$PGADMIN_DEFAULT_EMAIL" "$PGADMIN_DEFAULT_PASSWORD" | base64 -w0)
 
           ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "
           set -e
-          STACKS='$STACKS'
+          DEPLOY='$DEPLOY'
+          REMOVE='$REMOVE'
           BASE_ENV='$BASE_ENV'
           PGADMIN_ENV='$PGADMIN_ENV'
 
-          for stack in \$STACKS; do
+          for stack in \$DEPLOY; do
             echo '=== Deploying '\$stack' ==='
             mkdir -p /root/stacks/\$stack
             echo \"\$BASE_ENV\" | base64 -d > /root/stacks/\$stack/.env
@@ -231,9 +267,18 @@ jobs:
             docker compose up -d --remove-orphans
             echo '=== '\$stack' done ==='
           done
+
+          for stack in \$REMOVE; do
+            echo '=== Removing '\$stack' ==='
+            if [ -d /root/stacks/\$stack ]; then
+              cd /root/stacks/\$stack && docker compose down --remove-orphans
+              rm -rf /root/stacks/\$stack
+            fi
+            echo '=== '\$stack' removed ==='
+          done
           "
 
-  # ── VPS3 Production: traefik, monitoring, n8n ─────────────────────────────────
+  # ── VPS3 Production ───────────────────────────────────────────────────────────
   deploy-vps3:
     needs: detect
     if: needs.detect.outputs.vps3 == 'true'
@@ -251,7 +296,7 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Detect changed infra stacks
+      - name: Detect stacks to deploy and remove
         id: stacks
         run: |
           BEFORE="${{ github.event.before }}"
@@ -261,15 +306,23 @@ jobs:
           else
             DIFF=$(git diff --name-only "$BEFORE" "$SHA")
           fi
-          ALL=$(echo "$DIFF" | grep '^vps/vps3-prod/stacks/' \
-            | sed 's|vps/vps3-prod/stacks/||;s|/.*||' | sort -u | tr '\n' ' ')
-          FILTERED=$(echo "$ALL" | tr ' ' '\n' \
-            | grep -xE 'traefik|monitoring|n8n' | tr '\n' ' ')
-          echo "changed=$FILTERED" >> $GITHUB_OUTPUT
-          echo "Stacks to deploy: $FILTERED"
+          ALL_TOUCHED=$(echo "$DIFF" | grep '^vps/vps3-prod/stacks/' \
+            | sed 's|vps/vps3-prod/stacks/||;s|/.*||' | sort -u || true)
+          DEPLOY="" REMOVE=""
+          for stack in $ALL_TOUCHED; do
+            if [ -d "vps/vps3-prod/stacks/$stack" ]; then
+              DEPLOY="$DEPLOY $stack"
+            else
+              REMOVE="$REMOVE $stack"
+            fi
+          done
+          DEPLOY=$(echo $DEPLOY | xargs); REMOVE=$(echo $REMOVE | xargs)
+          echo "deploy=$DEPLOY" >> $GITHUB_OUTPUT
+          echo "remove=$REMOVE" >> $GITHUB_OUTPUT
+          echo "Deploy: $DEPLOY | Remove: $REMOVE"
 
       - name: Sync compose files
-        if: steps.stacks.outputs.changed != ''
+        if: steps.stacks.outputs.deploy != ''
         run: |
           rsync -rltz \
             --exclude='.env' --exclude='.env.*' \
@@ -277,26 +330,26 @@ jobs:
             vps/vps3-prod/stacks/ \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/stacks/"
 
-      - name: Write env files and deploy
-        if: steps.stacks.outputs.changed != ''
+      - name: Deploy and remove stacks
+        if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
           BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
           TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           N8N_DB_USER: ${{ vars.N8N_DB_USER }}
           N8N_DB_PASSWORD: ${{ secrets.N8N_DB_PASSWORD }}
           N8N_DB_NAME: ${{ vars.N8N_DB_NAME }}
           N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
           N8N_EDITOR_BASE_URL: ${{ vars.N8N_EDITOR_BASE_URL }}
           N8N_WEBHOOK_URL: ${{ vars.N8N_WEBHOOK_URL }}
-          STACKS: ${{ steps.stacks.outputs.changed }}
+          DEPLOY: ${{ steps.stacks.outputs.deploy }}
+          REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
           ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
 
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGRAFANA_ADMIN_PASSWORD=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GRAFANA_ADMIN_PASSWORD" | base64 -w0)
+          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' \
+            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" | base64 -w0)
 
           N8N_APP_ENV=$(printf '%s\n' \
             "DB_TYPE=postgresdb" "DB_POSTGRESDB_HOST=db-n8n" "DB_POSTGRESDB_PORT=5432" \
@@ -314,12 +367,13 @@ jobs:
 
           ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "
           set -e
-          STACKS='$STACKS'
+          DEPLOY='$DEPLOY'
+          REMOVE='$REMOVE'
           BASE_ENV='$BASE_ENV'
           N8N_APP_ENV='$N8N_APP_ENV'
           N8N_DB_ENV='$N8N_DB_ENV'
 
-          for stack in \$STACKS; do
+          for stack in \$DEPLOY; do
             echo '=== Deploying '\$stack' ==='
             mkdir -p /root/stacks/\$stack
             echo \"\$BASE_ENV\" | base64 -d > /root/stacks/\$stack/.env
@@ -331,5 +385,14 @@ jobs:
             cd /root/stacks/\$stack
             docker compose up -d --remove-orphans
             echo '=== '\$stack' done ==='
+          done
+
+          for stack in \$REMOVE; do
+            echo '=== Removing '\$stack' ==='
+            if [ -d /root/stacks/\$stack ]; then
+              cd /root/stacks/\$stack && docker compose down --remove-orphans
+              rm -rf /root/stacks/\$stack
+            fi
+            echo '=== '\$stack' removed ==='
           done
           "
