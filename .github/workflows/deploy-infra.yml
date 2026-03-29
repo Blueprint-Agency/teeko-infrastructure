@@ -57,11 +57,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+        run: sudo apt-get install -y sshpass
 
       - name: Detect stacks to deploy and remove
         id: stacks
@@ -93,15 +89,17 @@ jobs:
       - name: Sync compose files
         if: steps.stacks.outputs.deploy != ''
         run: |
-          rsync -rltz \
+          sshpass -p "${{ secrets.VPS1_SSH_PASSWORD }}" rsync -rltz \
             --exclude='.env' --exclude='.env.*' \
-            -e "ssh -i ~/.ssh/id_deploy" \
+            -e "ssh -o StrictHostKeyChecking=no" \
             vps/vps1-staging/stacks/ \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/stacks/"
+            "root@${{ vars.VPS1_HOST }}:/root/stacks/"
 
       - name: Deploy and remove stacks
         if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
+          SSH_PASSWORD: ${{ secrets.VPS1_SSH_PASSWORD }}
+          SSH_HOST: ${{ vars.VPS1_HOST }}
           BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
@@ -139,7 +137,7 @@ jobs:
           N8N_DB_ENV=$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
             "$N8N_DB_USER" "$N8N_DB_PASSWORD" "$N8N_DB_NAME" | base64 -w0)
 
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "
+          sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no "root@$SSH_HOST" "
           set -e
           DEPLOY='$DEPLOY'
           REMOVE='$REMOVE'
@@ -187,11 +185,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+        run: sudo apt-get install -y sshpass
 
       - name: Detect stacks to deploy and remove
         id: stacks
@@ -223,15 +217,17 @@ jobs:
       - name: Sync compose files
         if: steps.stacks.outputs.deploy != ''
         run: |
-          rsync -rltz \
+          sshpass -p "${{ secrets.VPS2_SSH_PASSWORD }}" rsync -rltz \
             --exclude='.env' --exclude='.env.*' \
-            -e "ssh -i ~/.ssh/id_deploy" \
+            -e "ssh -o StrictHostKeyChecking=no" \
             vps/vps2-prod/stacks/ \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/stacks/"
+            "root@${{ vars.VPS2_HOST }}:/root/stacks/"
 
       - name: Deploy and remove stacks
         if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
+          SSH_PASSWORD: ${{ secrets.VPS2_SSH_PASSWORD }}
+          SSH_HOST: ${{ vars.VPS2_HOST }}
           BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
@@ -249,7 +245,7 @@ jobs:
           PGADMIN_ENV=$(printf 'PGADMIN_DEFAULT_EMAIL=%s\nPGADMIN_DEFAULT_PASSWORD=%s\nPGADMIN_CONFIG_SERVER_MODE=True\nPGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=False\n' \
             "$PGADMIN_DEFAULT_EMAIL" "$PGADMIN_DEFAULT_PASSWORD" | base64 -w0)
 
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "
+          sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no "root@$SSH_HOST" "
           set -e
           DEPLOY='$DEPLOY'
           REMOVE='$REMOVE'
@@ -292,11 +288,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+        run: sudo apt-get install -y sshpass
 
       - name: Detect stacks to deploy and remove
         id: stacks
@@ -326,15 +318,17 @@ jobs:
       - name: Sync compose files
         if: steps.stacks.outputs.deploy != ''
         run: |
-          rsync -rltz \
+          sshpass -p "${{ secrets.VPS3_SSH_PASSWORD }}" rsync -rltz \
             --exclude='.env' --exclude='.env.*' \
-            -e "ssh -i ~/.ssh/id_deploy" \
+            -e "ssh -o StrictHostKeyChecking=no" \
             vps/vps3-prod/stacks/ \
-            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/root/stacks/"
+            "root@${{ vars.VPS3_HOST }}:/root/stacks/"
 
       - name: Deploy and remove stacks
         if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
+          SSH_PASSWORD: ${{ secrets.VPS3_SSH_PASSWORD }}
+          SSH_HOST: ${{ vars.VPS3_HOST }}
           BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
@@ -367,7 +361,7 @@ jobs:
           N8N_DB_ENV=$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
             "$N8N_DB_USER" "$N8N_DB_PASSWORD" "$N8N_DB_NAME" | base64 -w0)
 
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "
+          sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no "root@$SSH_HOST" "
           set -e
           DEPLOY='$DEPLOY'
           REMOVE='$REMOVE'
