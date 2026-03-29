@@ -161,7 +161,7 @@ jobs:
             esac
             cd /root/stacks/\$stack
             docker compose up -d --remove-orphans
-            docker image prune -f
+            docker image prune -af
             echo '=== '\$stack' done ==='
           done
 
@@ -266,7 +266,7 @@ jobs:
             esac
             cd /root/stacks/\$stack
             docker compose up -d --remove-orphans
-            docker image prune -f
+            docker image prune -af
             echo '=== '\$stack' done ==='
           done
 
@@ -386,7 +386,7 @@ jobs:
             esac
             cd /root/stacks/\$stack
             docker compose up -d --remove-orphans
-            docker image prune -f
+            docker image prune -af
             echo '=== '\$stack' done ==='
           done
 
