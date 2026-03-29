@@ -2,6 +2,7 @@
 services:
   n8n-dev:
     image: n8nio/n8n:latest
+    pull_policy: always
     container_name: n8n-dev
     restart: unless-stopped
     env_file: .env.n8n-dev

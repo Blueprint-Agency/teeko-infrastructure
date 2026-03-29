@@ -18,6 +18,7 @@ services:
 
   portainer-agent:
     image: portainer/agent:2.33.6
+    pull_policy: always
     container_name: portainer_agent
     restart: always
     ports:
