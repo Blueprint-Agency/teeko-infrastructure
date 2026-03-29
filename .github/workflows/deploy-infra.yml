@@ -29,7 +29,7 @@ jobs:
       vps2: ${{ steps.out.outputs.vps2 }}
       vps3: ${{ steps.out.outputs.vps3 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: out
@@ -52,7 +52,7 @@ jobs:
     environment: vps1-staging
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -181,7 +181,7 @@ jobs:
     environment: vps2-prod
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -285,7 +285,7 @@ jobs:
     environment: vps3-prod
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 

@@ -65,7 +65,6 @@ Each stack dir has its own `.env` (shared vars: `BASE_DOMAIN`, `ACME_EMAIL`) and
 
 ## Key Files
 
-- `vps/inventory.yml` — VPS inventory
 - `apps/registry.yml` — app-to-VPS mapping, images, ports, domains
 - `.env.example` — credentials template
 

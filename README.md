@@ -1,6 +1,6 @@
 # Infrastructure
 
-Central infrastructure-as-code repository for Blueprint-Agency. Manages 3 Hostinger VPS, Docker deployments, CI/CD, monitoring, and GitHub org.
+Central infrastructure-as-code repository for Blueprint-Agency. Manages 3 Hostinger VPS, Docker deployments, and CI/CD.
 
 ## Architecture
 
@@ -20,10 +20,17 @@ Developer → push to staging/main → GitHub Actions (CI) → DockerHub
 ```
 
 - **Reverse proxy**: Traefik on all VPS (auto-discovery, Let's Encrypt via Cloudflare DNS)
-- **Monitoring**: Grafana + Prometheus + cAdvisor + Node Exporter on all VPS
 - **Registry**: DockerHub — `blueprintagency/<app>:<tag>`
 - **Databases**: Local PostgreSQL per app (migrating to Supabase); n8n keeps local Postgres
 - **External**: Supabase, Auth0, Stripe
+
+## What's Running
+
+| VPS | Stacks |
+|-----|--------|
+| VPS1 — Staging | `traefik`, `website` (staging.teeko.ai), `webapp` (staging), `n8n` (stagingn8n.teeko.ai), `tools` (pgadmin at stagingpg.teeko.ai, Portainer CE at port.teeko.ai) |
+| VPS2 — Prod | `traefik`, `website` (teeko.ai), `tools` (pgadmin at pg.teeko.ai, portainer-agent) |
+| VPS3 — Prod | `traefik`, `n8n` (n8n.teeko.ai), `tools` (portainer-agent) |
 
 ## CI/CD Flow
 
@@ -36,13 +43,11 @@ Developer → push to staging/main → GitHub Actions (CI) → DockerHub
 
 ```
 ├── vps/
-│   ├── inventory.yml              VPS inventory (IPs, specs, roles)
 │   ├── vps1-staging/stacks/       Per-stack compose files for VPS1
 │   ├── vps2-prod/stacks/          Per-stack compose files for VPS2
 │   ├── vps3-prod/stacks/          Per-stack compose files for VPS3
 │   └── shared/                    Deploy, healthcheck, setup scripts
 ├── apps/registry.yml              App → VPS mapping, images, ports, domains
-├── github/                        Org settings, team roles, repo standards
 ├── .env.example                   Credentials template
 └── .mcp.json.example              MCP server config template
 ```
@@ -131,6 +136,7 @@ All VPS — managed via **Hostinger VPS panel**:
 | 22 | **Open** | SSH |
 | 80 | **Open** | HTTP (Traefik redirects to 443) |
 | 443 | **Open** | HTTPS (Traefik terminates TLS) |
+| 9001 | **Open on VPS2/VPS3** | Portainer agent (required for Portainer on VPS1) |
 | All others | **Closed** | Apps accessible via Traefik only |
 
 ## GitHub Actions Secrets (per environment)
@@ -147,5 +153,3 @@ All VPS — managed via **Hostinger VPS panel**:
 | Member | Role |
 |--------|------|
 | @chriskke | DevOps Lead — sole devops, admin on all VPS and GitHub org |
-| TBD | Developer |
-| TBD | Developer |
