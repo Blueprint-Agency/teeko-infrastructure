@@ -66,6 +66,21 @@ apps:
     db: local-postgres       # TODO: migrate to Supabase
     notes: "Teeko webapp backend (Node.js). Staging only."
 
+  - name: ehailing-be
+    image: blueprintagency/ehailing-be
+    tags:
+      staging: staging
+      production: ""           # not yet on production
+    stack: ehailing
+    vps:
+      staging: vps3-prod       # NOTE: hosted on prod VPS3 even in staging phase
+      production: ""
+    port: 3000
+    domain:
+      staging: ehailingapi.teeko.ai
+    db: supabase
+    notes: "Teeko e-hailing backend (Fastify + Drizzle). Built from teeko-ehailing/apps/backend, staging branch. Uses dedicated ehailing-network."
+
 n8n_instances:
   - name: n8n-dev
     image: n8nio/n8n:latest
