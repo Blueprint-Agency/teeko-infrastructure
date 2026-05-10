@@ -378,10 +378,18 @@ jobs:
           N8N_APP_ENV='$N8N_APP_ENV'
           N8N_DB_ENV='$N8N_DB_ENV'
 
+          # App-managed stacks: infra rsyncs the compose file but the app's own
+          # workflow writes .env.* and runs 'docker compose up'. Skip the up here.
+          APP_STACKS='booking-system ehailing'
+
           for stack in \$DEPLOY; do
             echo '=== Deploying '\$stack' ==='
             mkdir -p /root/stacks/\$stack
             echo \"\$BASE_ENV\" | base64 -d > /root/stacks/\$stack/.env
+            if echo \" \$APP_STACKS \" | grep -q \" \$stack \"; then
+              echo \"=== \$stack compose synced; up handled by app workflow ===\"
+              continue
+            fi
             case \$stack in
               n8n)
                 echo \"\$N8N_APP_ENV\" | base64 -d > /root/stacks/n8n/.env.n8n-prod
