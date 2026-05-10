@@ -1,0 +1,50 @@
+services:
+  booking-be:
+    image: blueprintagency/booking-be:latest
+    pull_policy: always
+    container_name: booking-be
+    restart: unless-stopped
+    env_file: .env.booking-be
+    depends_on:
+      db-booking:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.booking-be.rule=Host(`bookingapi.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.booking-be.entrypoints=websecure"
+      - "traefik.http.routers.booking-be.tls.certresolver=letsencrypt"
+      - "traefik.http.services.booking-be.loadbalancer.server.port=4000"
+    networks:
+      - proxy
+      - booking-network
+
+  # Service name 'db-booking' = hostname inside booking-network.
+  # DATABASE_URL should be: postgres://<user>:<pass>@db-booking:5432/<db>
+  db-booking:
+    image: postgres:16-alpine
+    container_name: booking-db
+    restart: unless-stopped
+    env_file: .env.booking-db
+    environment:
+      TZ: Asia/Kuala_Lumpur
+      PGTZ: Asia/Kuala_Lumpur
+    volumes:
+      - booking_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - booking-network
+
+volumes:
+  booking_pgdata:
+    name: booking_pgdata
+
+networks:
+  proxy:
+    external: true
+  booking-network:
+    name: booking-network
+    driver: bridge

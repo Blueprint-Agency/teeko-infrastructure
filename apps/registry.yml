@@ -81,6 +81,21 @@ apps:
     db: supabase
     notes: "Teeko e-hailing backend (Fastify + Drizzle). Built from teeko-ehailing/apps/backend, staging branch. Uses dedicated ehailing-network."
 
+  - name: booking-be
+    image: blueprintagency/booking-be
+    tags:
+      staging: ""              # no staging branch yet
+      production: latest
+    stack: booking-system
+    vps:
+      staging: ""
+      production: vps3-prod
+    port: 4000
+    domain:
+      production: bookingapi.teeko.ai
+    db: local-postgres
+    notes: "Yoga Sadhana booking-system backend (Hono + Drizzle + Postgres). Built from booking-system/be, main branch. Uses dedicated booking-network."
+
 n8n_instances:
   - name: n8n-dev
     image: n8nio/n8n:latest

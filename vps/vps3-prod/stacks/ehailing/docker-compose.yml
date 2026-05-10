@@ -5,6 +5,9 @@ services:
     container_name: ehailing-be
     restart: unless-stopped
     env_file: .env.ehailing-be
+    depends_on:
+      db-ehailing:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ehailing-be.rule=Host(`ehailingapi.${BASE_DOMAIN}`)"
@@ -14,6 +17,30 @@ services:
     networks:
       - proxy
       - ehailing-network
+
+  # Service name 'db-ehailing' = hostname inside ehailing-network.
+  # DATABASE_URL should be: postgres://<user>:<pass>@db-ehailing:5432/<db>
+  db-ehailing:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: ehailing-db
+    restart: unless-stopped
+    env_file: .env.ehailing-db
+    environment:
+      TZ: Asia/Kuala_Lumpur
+      PGTZ: Asia/Kuala_Lumpur
+    volumes:
+      - ehailing_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ehailing-network
+
+volumes:
+  ehailing_pgdata:
+    name: ehailing_pgdata
 
 networks:
   proxy:
