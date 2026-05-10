@@ -12,6 +12,7 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       - "traefik.http.routers.booking-be.rule=Host(`bookingapi.${BASE_DOMAIN}`)"
       - "traefik.http.routers.booking-be.entrypoints=websecure"
       - "traefik.http.routers.booking-be.tls.certresolver=letsencrypt"
