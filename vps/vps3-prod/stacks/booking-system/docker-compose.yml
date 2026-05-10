@@ -1,3 +1,5 @@
+# Yoga Sadhana booking-system (Hono BE + Postgres). Compose synced by infra,
+# .env.* + docker compose up handled by booking-system app workflow.
 services:
   booking-be:
     image: blueprintagency/booking-be:latest
