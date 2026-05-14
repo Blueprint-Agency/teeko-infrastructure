@@ -10,6 +10,7 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       - "traefik.http.routers.ehailing-be.rule=Host(`ehailingapi.${BASE_DOMAIN}`)"
       - "traefik.http.routers.ehailing-be.entrypoints=websecure"
       - "traefik.http.routers.ehailing-be.tls.certresolver=letsencrypt"
