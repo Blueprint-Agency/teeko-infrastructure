@@ -8,6 +8,8 @@ services:
     depends_on:
       db-ehailing:
         condition: service_healthy
+      redis-ehailing:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
@@ -39,9 +41,29 @@ services:
     networks:
       - ehailing-network
 
+  # Service name 'redis-ehailing' = hostname inside ehailing-network.
+  # REDIS_URL should be: redis://redis-ehailing:6379
+  # Not published to the host — only reachable inside ehailing-network.
+  redis-ehailing:
+    image: redis:7-alpine
+    container_name: ehailing-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ehailing_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ehailing-network
+
 volumes:
   ehailing_pgdata:
     name: ehailing_pgdata
+  ehailing_redisdata:
+    name: ehailing_redisdata
 
 networks:
   proxy:
