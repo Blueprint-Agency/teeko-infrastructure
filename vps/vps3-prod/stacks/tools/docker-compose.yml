@@ -1,4 +1,24 @@
 services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    env_file: .env.pgadmin
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    labels:
+      - "traefik.enable=true"
+      # pgadmin is attached to 3 networks; tell Traefik which one to route on.
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.pgadmin.rule=Host(`pg3.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.pgadmin.entrypoints=websecure"
+      - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+    networks:
+      - proxy             # Traefik web UI (pg3.teeko.ai)
+      - ehailing-network  # reach db-ehailing:5432
+      - booking-network   # reach db-booking:5432
+
   portainer-agent:
     image: portainer/agent:2.33.6
     pull_policy: always
@@ -13,6 +33,16 @@ services:
     networks:
       - proxy
 
+volumes:
+  pgadmin-data:
+    external: true
+
 networks:
   proxy:
+    external: true
+  # Owned by the ehailing / booking-system stacks; joined here so pgadmin can
+  # reach their Postgres containers by service hostname.
+  ehailing-network:
+    external: true
+  booking-network:
     external: true
