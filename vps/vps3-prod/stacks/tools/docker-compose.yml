@@ -1,3 +1,4 @@
+# Deployed to VPS3 over Tailscale via infra CI (.github/workflows/deploy-infra.yml).
 services:
   # Drizzle Gateway — self-hosted Drizzle Studio for managing Postgres.
   # Replaces pgAdmin. Login with MASTERPASS (from .env.gateway), then add DB
