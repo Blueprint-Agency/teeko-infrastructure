@@ -78,12 +78,12 @@
 
 | Stack | Services | Domain(s) |
 |-------|----------|-----------|
-| `traefik` | Traefik reverse proxy (+ file provider for Mailcow) | — |
+| `traefik` | Traefik reverse proxy (+ file provider for the mail web UIs) | — |
 | `kaiteki` | `kaiteki` (legacy static site) | `kaiteki.my` |
 | `wordpress` | `wordpress`, `wp-db` (MariaDB) | `blog.kaiteki.my` |
-| `stalwart` | Stalwart mail server + Roundcube webmail (`/root/stacks/stalwart`) | `email.kaiteki.my`, `webmail.kaiteki.my` |
+| `stalwart` | Stalwart mail server + Bulwark webmail (`/root/stacks/stalwart`) | `mail.kaiteki.my`, `webmail.kaiteki.my` |
 
-> **Stalwart + Roundcube** co-hosted behind Traefik (replaced Mailcow). One LE cert (acme.sh Cloudflare DNS-01, `KAITEKI_CF_DNS_API_TOKEN`) is shared by Stalwart (mail TLS, set in its admin UI) and Traefik (web UIs, file provider). Stalwart config lives in its store; `config.json` is bind-mounted so a recreate doesn't re-trigger the setup wizard. DNS = separate `kaiteki.my` Cloudflare account. See `vps/bpvps1/stacks/stalwart/README.md`.
+> **Stalwart + Bulwark** co-hosted behind Traefik (replaced Mailcow, then Roundcube→Bulwark). One LE cert (acme.sh Cloudflare DNS-01, `KAITEKI_CF_DNS_API_TOKEN`) for `mail.kaiteki.my` + `webmail.kaiteki.my` is shared by Stalwart (mail TLS, set in its admin UI) and Traefik (web UIs, file provider). Bulwark talks JMAP over HTTPS to `mail.kaiteki.my` (a Traefik network alias → `stalwart:8080`); this needs Stalwart's **Default Hostname = `mail.kaiteki.my`** and **Permissive CORS = on**. Stalwart config lives in its store; `config.json` is bind-mounted so a recreate doesn't re-trigger the setup wizard. DNS = separate `kaiteki.my` Cloudflare account. See `vps/bpvps1/stacks/stalwart/README.md`.
 
 ---
 

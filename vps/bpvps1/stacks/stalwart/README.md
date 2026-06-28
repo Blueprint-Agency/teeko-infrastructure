@@ -1,68 +1,69 @@
-# Stalwart + Roundcube — self-hosted email for `kaiteki.my` (BPVPS1)
+# Stalwart + Bulwark — self-hosted email for `kaiteki.my` (BPVPS1)
 
-Replaces the earlier Mailcow stack. **Stalwart** (Rust mail server, v0.16) handles
-SMTP/IMAP/POP3/JMAP/ManageSieve + DKIM + spam; **Roundcube** is the webmail.
+**Stalwart** (Rust mail server, v1.0) handles SMTP/IMAP/POP3/JMAP/ManageSieve + DKIM +
+spam; **Bulwark** is a modern JMAP webmail (HTML compose, themes, calendar, contacts,
+files, built-in admin dashboard). Replaced the earlier Roundcube webmail; the mail host
+was renamed `email.kaiteki.my` → `mail.kaiteki.my`.
 
 | | URL | Login |
 |---|---|---|
-| Admin UI | `https://email.kaiteki.my` | `admin@kaiteki.my` (created by the setup wizard) |
+| Stalwart admin | `https://mail.kaiteki.my` (→ `/account`) | `admin@kaiteki.my` |
 | Webmail | `https://webmail.kaiteki.my` | mailbox creds (e.g. `admin@kaiteki.my`) |
+| Bulwark admin dashboard | `https://webmail.kaiteki.my/admin` | `ADMIN_PASSWORD` (stack `.env`, `BULWARK_ADMIN_PASSWORD`) |
 
-Stack dir on VPS: `/root/stacks/stalwart/`. Data in the `stalwart-data` volume
+Stack dir on VPS: `/root/stacks/stalwart/`. Mail data in the `stalwart-data` volume
 (RocksDB at `/opt/stalwart/data`). Co-hosted behind the existing Traefik.
 
 ## How it fits together
 - **Mail ports** (25/465/587/993/143/110/995/4190) bind directly on the host.
-- **Web UIs** go through Traefik: `email.` → `stalwart:8080`, `webmail.` → `roundcube:80`,
+- **Web UIs** go through Traefik: `mail.` → `stalwart:8080`, `webmail.` → `bulwark:3000`,
   over the external `stalwart_mailnet` network. See `../traefik/dynamic/stalwart.yml`.
-- **Roundcube → Stalwart** uses the network alias `email.kaiteki.my` (on `stalwart_mailnet`)
-  so it connects internally with a **cert-matching** name (`ssl://email.kaiteki.my:993/465`).
+- **Bulwark → Stalwart is JMAP over HTTPS.** Bulwark uses `JMAP_SERVER_URL=https://mail.kaiteki.my`
+  and follows the **absolute** URLs Stalwart returns in its JMAP session. So:
+  - Stalwart's **Default Hostname must be `mail.kaiteki.my`** (admin UI → Settings → Network),
+    otherwise the session advertises the wrong host and the webmail breaks.
+  - `mail.kaiteki.my` is a **network alias on Traefik** (`../traefik/docker-compose.yml`) so the
+    Bulwark container resolves it internally to Traefik → valid cert → `stalwart:8080`.
+  - The browser also calls JMAP **cross-origin** (`webmail.` → `mail.`), so Stalwart needs
+    **Permissive CORS enabled** (admin UI → Settings → HTTP Security → *Permissive CORS policy*).
+    Without it, login fails with "server is blocking cross-origin requests".
 
-## TLS (the tricky bit)
-One LE cert for `email.kaiteki.my` + `webmail.kaiteki.my`, issued **out-of-band via
+## TLS
+One LE cert for `mail.kaiteki.my` + `webmail.kaiteki.my`, issued **out-of-band via
 Cloudflare DNS-01** (acme.sh + `KAITEKI_CF_DNS_API_TOKEN`) because Traefik's CF token only
 covers `teeko.ai`. Cert lands in `./certs/{fullchain,key}.pem`.
 - **Traefik** serves it via the file provider (`stalwart.yml`).
-- **Stalwart** reads the same files for mail TLS — set once in the **admin UI →
-  Settings → TLS → Certificates** as **File** references (`/opt/stalwart/certs/...`).
-  ⚠️ The cert files must be readable by Stalwart's user: `chown 2000:2000 ./certs/*.pem`.
-- Renewal: `renew-cert.sh` (run daily by host cron) re-runs acme.sh, reinstalls to
-  `./certs`, re-chowns, and restarts Stalwart.
+- **Stalwart** reads the same files for mail TLS — set in the admin UI → Settings → TLS as
+  **File** references. ⚠️ The files must be readable by Stalwart's user: `chown 2000:2000 ./certs/*.pem`.
+- Renewal: `renew-cert.sh` (daily host cron) re-runs acme.sh (it **reads `CF_Token` from the
+  stack `.env`** — the saved-creds path is unreliable), reinstalls to `./certs`, re-chowns,
+  restarts Stalwart. Cert is **ECC**, acme dir `./acme/mail.kaiteki.my_ecc/`.
 
-## DNS (zone `kaiteki.my`, separate CF account — `KAITEKI_CF_DNS_API_TOKEN`)
+## DNS (zone `kaiteki.my`, separate CF account — `KAITEKI_CF_DNS_API_TOKEN`, zone `6378ec…`)
 | Record | Name | Value |
 |--------|------|-------|
-| A | `email.kaiteki.my` / `webmail.kaiteki.my` | `187.127.122.41` (DNS-only) |
-| MX | `kaiteki.my` | `email.kaiteki.my` (10) |
+| A | `mail.kaiteki.my` / `webmail.kaiteki.my` | `187.127.122.41` (DNS-only) |
+| MX | `kaiteki.my` | `mail.kaiteki.my` (10) |
 | TXT (SPF) | `kaiteki.my` | `v=spf1 mx ~all` |
-| TXT (DKIM) | `v1-rsa-20260628._domainkey` | `v=DKIM1; k=rsa; p=…` |
-| TXT (DKIM) | `v1-ed25519-20260628._domainkey` | `v=DKIM1; k=ed25519; p=…` |
-| TXT (DMARC) | `_dmarc.kaiteki.my` | `v=DMARC1; p=none; rua=mailto:dmarc@kaiteki.my; fo=1` |
+| TXT (DKIM) | `v1-rsa-20260628._domainkey` / `v1-ed25519-20260628._domainkey` | `v=DKIM1; …` |
+| TXT (DMARC) | `_dmarc.kaiteki.my` | `v=DMARC1; p=…; rua=mailto:…` |
 
-Verified: SPF pass, DKIM pass (RSA), inbound + outbound working. DKIM selectors come from
-Stalwart's template `v{version}-{algorithm}-{date}`; **re-publish if keys rotate.**
+PTR (Hostinger hPanel): `187.127.122.41` → **`mail.kaiteki.my`** (FCrDNS / deliverability).
 
 ## ⚠️ Gotchas / landmines
-- **`config.json` is persistence-critical.** It's the storage pointer Stalwart reads on
-  boot (`--config /etc/stalwart/config.json`). `/etc/stalwart` is **not** a volume, so it's
-  bind-mounted from `./config.json`. **Without this mount, a container recreate wipes
-  Stalwart back into the bootstrap/setup wizard** (data survives in the store, but config
-  is lost). Do not remove the mount.
-- Config lives in the **store (DB)**, set via the **admin UI**, not a TOML file. There's no
-  CLI and the settings REST API isn't readily scriptable — most config is UI-driven.
-- `STALWART_RECOVERY_ADMIN` (in stack `.env`, gitignored) is a fallback admin for the
-  management API on `127.0.0.1:8090`.
-- Old DKIM verifiers (e.g. port25) can't evaluate Ed25519 (RFC 8463) → harmless `permerror`;
-  the RSA signature still passes.
-
-## Host requirements (Hostinger hPanel — BPVPS1)
-- Firewall: `22, 25, 80, 443` (+ optionally `465/587/993/995/143/110/4190` for native
-  IMAP/SMTP clients; webmail only needs `443`). PTR `187.127.122.41` → `email.kaiteki.my`.
+- **`config.json` is persistence-critical** — the storage pointer Stalwart reads on boot
+  (`/etc/stalwart/config.json`), bind-mounted from `./config.json`. Without it a container
+  recreate wipes Stalwart back into the setup wizard (mail data survives, config lost).
+- **Most config lives in the store**, set via the admin UI. The v1.0 management REST API is
+  OAuth-only and not the documented `/api/settings*` path — there's no easy scripting; use the UI.
+- The three settings the webmail depends on (above): **Default Hostname = mail.kaiteki.my**,
+  **Permissive CORS = on**, and the **TLS File** cert refs.
+- Old DKIM verifiers (e.g. port25) can't evaluate Ed25519 → harmless `permerror`; RSA passes.
 
 ## Ops
 ```bash
 cd /root/stacks/stalwart
 docker compose ps
-docker compose up -d            # safe to recreate now (config.json is mounted)
-./renew-cert.sh                 # manual cert renew (also runs daily via cron)
+docker compose up -d            # safe to recreate (config.json is mounted)
+./renew-cert.sh                 # manual cert renew (also daily via cron)
 ```

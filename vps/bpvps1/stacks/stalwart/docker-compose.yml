@@ -1,13 +1,20 @@
-# Self-hosted email for kaiteki.my — Stalwart mail server + Roundcube webmail,
-# co-hosted on BPVPS1 behind the existing Traefik. Replaces the earlier Mailcow stack.
+# Self-hosted email for kaiteki.my — Stalwart mail server + Bulwark (JMAP) webmail,
+# co-hosted on BPVPS1 behind the existing Traefik. (Bulwark replaced Roundcube; the
+# mail host was renamed email.kaiteki.my -> mail.kaiteki.my.)
 #
-# Admin UI : https://email.kaiteki.my   (Stalwart)
-# Webmail  : https://webmail.kaiteki.my (Roundcube)
+# Admin UI : https://mail.kaiteki.my     (Stalwart admin + JMAP endpoint)
+# Webmail  : https://webmail.kaiteki.my  (Bulwark)
 #
-# TLS: a single LE cert (email.kaiteki.my + webmail.kaiteki.my) is issued out-of-band
+# TLS: a single LE cert (mail.kaiteki.my + webmail.kaiteki.my) is issued out-of-band
 # via Cloudflare DNS-01 (acme.sh, KAITEKI_CF_DNS_API_TOKEN) into ./certs and is used by
 # BOTH Stalwart (mail ports, set in the admin UI -> Settings -> TLS, reading the files)
 # AND Traefik (web UIs, file provider). See README.md.
+#
+# Bulwark talks to Stalwart over JMAP (HTTPS). It reaches the server at
+# https://mail.kaiteki.my, which resolves INTERNALLY to Traefik (network alias on
+# stalwart_mailnet, set in ../traefik/docker-compose.yml) so the LE cert verifies and
+# Traefik proxies to stalwart:8080. Stalwart's JMAP session advertises absolute
+# mail.kaiteki.my URLs, so its hostname MUST be set to mail.kaiteki.my in the admin UI.
 #
 # IMPORTANT: config.json (the storage pointer) is bind-mounted so a container recreate
 # does NOT wipe Stalwart back into bootstrap mode. Do not remove it.
@@ -34,33 +41,47 @@ services:
       - ./certs:/opt/stalwart/certs:ro            # LE cert from acme.sh (chown 2000:2000 to read)
       - ./config.json:/etc/stalwart/config.json   # storage pointer — persistence-critical
     networks:
-      mailnet:
-        # Lets Roundcube reach Stalwart over the internal net with a cert-matching name.
-        aliases:
-          - email.kaiteki.my
+      - mailnet
 
-  roundcube:
-    image: roundcube/roundcubemail:latest
-    container_name: roundcube
+  # Bulwark — modern JMAP webmail built for Stalwart (HTML compose, themes, calendar,
+  # contacts, built-in admin dashboard). Login with mailbox creds (e.g. admin@kaiteki.my).
+  bulwark:
+    image: ghcr.io/bulwarkmail/webmail:latest
+    container_name: bulwark
     restart: unless-stopped
     environment:
-      - ROUNDCUBEMAIL_DB_TYPE=sqlite
-      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://email.kaiteki.my   # -> stalwart via network alias, valid cert
-      - ROUNDCUBEMAIL_DEFAULT_PORT=993
-      - ROUNDCUBEMAIL_SMTP_SERVER=ssl://email.kaiteki.my
-      - ROUNDCUBEMAIL_SMTP_PORT=465
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+      - JMAP_SERVER_URL=https://mail.kaiteki.my   # -> Traefik (mailnet alias) -> stalwart:8080
+      - STALWART_FEATURES=true                    # password change, Sieve filters, etc.
+      - APP_NAME=Kaiteki Mail
+      - SETTINGS_SYNC_ENABLED=true                # server-side per-user settings (needs SESSION_SECRET)
+      - SESSION_SECRET=${BULWARK_SESSION_SECRET}  # openssl rand -base64 32; real value in stack .env
+      - ADMIN_PASSWORD=${BULWARK_ADMIN_PASSWORD}  # enables Bulwark's built-in admin dashboard (/admin)
     volumes:
-      - roundcube-data:/var/www/html
+      - bulwark-settings:/app/data/settings        # encrypted per-user settings
+      - bulwark-admin:/app/data/admin              # admin config, plugins, themes, branding
+      - bulwark-admin-state:/app/data/admin-state  # admin login state, audit log, setup token
+      - bulwark-telemetry:/app/data/telemetry      # instance id + consent (anonymous)
     networks:
       - mailnet
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       - stalwart
 
 volumes:
   stalwart-data:
-  roundcube-data:
+  bulwark-settings:
+  bulwark-admin:
+  bulwark-admin-state:
+  bulwark-telemetry:
 
 networks:
-  # Traefik joins this (external) to reach stalwart:8080 and roundcube:80.
+  # Traefik joins this (external) to reach stalwart:8080 and bulwark:3000.
   mailnet:
     name: stalwart_mailnet

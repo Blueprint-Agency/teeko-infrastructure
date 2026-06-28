@@ -43,8 +43,13 @@ services:
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
     networks:
-      - proxy
-      - mailnet
+      proxy: {}
+      # Alias mail.kaiteki.my -> Traefik on the mail network, so the Bulwark webmail
+      # container resolves the Stalwart JMAP host (https://mail.kaiteki.my) to Traefik
+      # and gets a valid cert; Traefik then proxies to stalwart:8080.
+      mailnet:
+        aliases:
+          - mail.kaiteki.my
 
 volumes:
   traefik-letsencrypt:

@@ -1,10 +1,11 @@
 # Traefik dynamic config — serves the shared LE cert (acme.sh DNS-01) and routes the
-# Kaiteki mail web UIs. Replaces the old mailcow.yml.
-#   email.kaiteki.my   -> Stalwart admin/JMAP (stalwart:8080)
-#   webmail.kaiteki.my -> Roundcube (roundcube:80)
+# Kaiteki mail web UIs.
+#   mail.kaiteki.my    -> Stalwart admin + JMAP endpoint (stalwart:8080)
+#   webmail.kaiteki.my -> Bulwark webmail (bulwark:3000)
 # Traefik terminates TLS here using the file cert (no per-host ACME — Traefik's CF token
 # only covers teeko.ai, not kaiteki.my). Traefik reaches the containers over the external
-# stalwart_mailnet network (see traefik compose).
+# stalwart_mailnet network (see traefik compose). The mail.kaiteki.my network alias on
+# Traefik (compose) lets Bulwark reach the Stalwart JMAP host internally with a valid cert.
 tls:
   certificates:
     - certFile: /certs/fullchain.pem
@@ -13,20 +14,20 @@ http:
   routers:
     stalwart-admin:
       entryPoints: [websecure]
-      rule: "Host(`email.kaiteki.my`)"
+      rule: "Host(`mail.kaiteki.my`)"
       service: stalwart-admin
       tls: {}
-    roundcube:
+    bulwark:
       entryPoints: [websecure]
       rule: "Host(`webmail.kaiteki.my`)"
-      service: roundcube
+      service: bulwark
       tls: {}
   services:
     stalwart-admin:
       loadBalancer:
         servers:
           - url: "http://stalwart:8080"
-    roundcube:
+    bulwark:
       loadBalancer:
         servers:
-          - url: "http://roundcube:80"
+          - url: "http://bulwark:3000"
