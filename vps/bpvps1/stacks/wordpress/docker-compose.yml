@@ -29,9 +29,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
+      # kaiteki.my is on a separate Cloudflare account (no DNS-01 access from this VPS).
+      # Cloudflare (proxied) terminates public TLS; Traefik serves default cert to origin.
       - "traefik.http.routers.kaiteki-blog.rule=Host(`${WP_HOST}`)"
       - "traefik.http.routers.kaiteki-blog.entrypoints=websecure"
-      - "traefik.http.routers.kaiteki-blog.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.kaiteki-blog.tls=true"
       - "traefik.http.services.kaiteki-blog.loadbalancer.server.port=80"
     networks:
       - proxy

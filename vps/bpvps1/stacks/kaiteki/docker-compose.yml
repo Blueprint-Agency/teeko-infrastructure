@@ -11,9 +11,13 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.kaiteki.rule=Host(`kaiteki.${BASE_DOMAIN}`)"
+      # kaiteki.my is on a SEPARATE Cloudflare account the VPS token can't manage,
+      # so no Let's Encrypt DNS-01 here. Cloudflare (proxied) terminates public TLS;
+      # Traefik serves its default cert to the CF origin pull. CF SSL/TLS mode = Full
+      # (or Full-strict with a CF Origin Cert installed on Traefik).
+      - "traefik.http.routers.kaiteki.rule=Host(`kaiteki.my`) || Host(`www.kaiteki.my`)"
       - "traefik.http.routers.kaiteki.entrypoints=websecure"
-      - "traefik.http.routers.kaiteki.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.kaiteki.tls=true"
       - "traefik.http.services.kaiteki.loadbalancer.server.port=80"
     networks:
       - proxy
