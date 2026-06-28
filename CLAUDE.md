@@ -18,17 +18,19 @@ Config in `.mcp.json` (gitignored — contains tokens). Use `.mcp.json.example` 
 
 **GitHub**: use `git` (bash) for repo operations and `curl` + GitHub REST API for org/repo management, secrets, and environments. PAT stored in `.env` as `GITHUB_PERSONAL_ACCESS_TOKEN`.
 
-**VPS/Docker**: use `ssh vps1-staging` / `ssh vps2-prod` / `ssh vps3-prod` directly.
+**VPS/Docker**: use `ssh bp-vps1-staging` / `ssh bp-vps2-prod` / `ssh bp-vps3-prod` directly.
 
 ## VPS Access
 
 | Alias | Role | Specs |
 |-------|------|-------|
-| `vps1-staging` | Staging | 2 vCPU / 8GB / 100GB |
-| `vps2-prod` | Production | 4 vCPU / 16GB / 200GB |
-| `vps3-prod` | Production | 4 vCPU / 16GB / 200GB |
+| `bp-vps1-staging` | Staging | 2 vCPU / 8GB / 100GB |
+| `bp-vps2-prod` | Production | 4 vCPU / 16GB / 200GB |
+| `bp-vps3-prod` | Production | 4 vCPU / 16GB / 200GB |
 
 SSH key: `~/.ssh/infra_ed25519`. Hosts defined in `~/.ssh/config`.
+
+> ⚠️ **Always use the `bp-` prefix.** The bare aliases `vps1-staging` / `vps2-prod` in `~/.ssh/config` belong to a **different client (Inquantum AI)** on a different key — operating on them by mistake hits the wrong company's servers. There is no bare `vps3-prod`.
 
 ## What's Running
 

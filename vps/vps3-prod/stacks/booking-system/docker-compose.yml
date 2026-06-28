@@ -7,6 +7,16 @@ services:
     container_name: booking-be
     restart: unless-stopped
     env_file: .env.booking-be
+    healthcheck:
+      # Verifies the API serves AND can reach Postgres. Lets `compose up --wait`
+      # in the deploy workflow block until booking-be is truly healthy, and
+      # surfaces a crash-loop as "unhealthy" in `docker ps`. node:20-alpine ships
+      # a global fetch, so no curl/wget needed in the image.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       db-booking:
         condition: service_healthy

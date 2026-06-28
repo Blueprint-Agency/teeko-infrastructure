@@ -1,0 +1,23 @@
+# Kaiteki.my legacy site (static HTML + light PHP, PHP 8.1/Apache, no DB).
+# Interim deployment while the Next.js rebuild (kaiteki-main) is in progress.
+# Compose synced by infra; image build/push + `docker compose up` are handled by
+# the kaiteki-main-old app workflow (app-managed stack, like booking-system/ehailing).
+services:
+  kaiteki:
+    image: blueprintagency/kaiteki-main-old:latest
+    pull_policy: always
+    container_name: kaiteki
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.kaiteki.rule=Host(`kaiteki.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.kaiteki.entrypoints=websecure"
+      - "traefik.http.routers.kaiteki.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kaiteki.loadbalancer.server.port=80"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
