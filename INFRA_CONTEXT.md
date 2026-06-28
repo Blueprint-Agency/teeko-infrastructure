@@ -72,6 +72,19 @@
 
 > **Portainer:** VPS1 runs Portainer CE UI, connected to portainer-agents on VPS2 and VPS3 (port 9001). Do not remove agent stacks.
 
+### BPVPS1 — Kaiteki (separate client, 4th VPS)
+
+`bp-bpvps1` (`187.127.122.41`) — Kaiteki workloads, isolated from the Teeko boxes above. Not wired into `deploy-infra.yml` (managed manually).
+
+| Stack | Services | Domain(s) |
+|-------|----------|-----------|
+| `traefik` | Traefik reverse proxy (+ file provider for Mailcow) | — |
+| `kaiteki` | `kaiteki` (legacy static site) | `kaiteki.my` |
+| `wordpress` | `wordpress`, `wp-db` (MariaDB) | `blog.kaiteki.my` |
+| `mailcow` | Mailcow (self-hosted email, ~18 containers) at `/opt/mailcow-dockerized` | `email.kaiteki.my` |
+
+> **Mailcow** is co-hosted behind Traefik: Mailcow self-issues its own LE cert (HTTP-01); Traefik forwards `email.kaiteki.my` `:80` and TLS-passthroughs `:443`. See `vps/bpvps1/stacks/mailcow/README.md`. DNS is the separate `kaiteki.my` Cloudflare account (`KAITEKI_CF_DNS_API_TOKEN`).
+
 ---
 
 ## 5. App Registry (`apps/registry.yml`)
@@ -349,6 +362,7 @@ Config lives in `.mcp.json` (gitignored). Template: `.mcp.json.example`.
 |-----|-----------|
 | VPS1 (staging) | 22, 80, 443 |
 | VPS2 + VPS3 (prod) | 22, 80, 443, 9001 (portainer-agent) |
+| BPVPS1 (kaiteki) | 22, 80, 443 + mail: 25, 465, 587, 993, 995, 143, 110, 4190 |
 
 Everything else closed — ports 3000, 5432, 5678, 8080, 9090 are accessed via Traefik only.
 

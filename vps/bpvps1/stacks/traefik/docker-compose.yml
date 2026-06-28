@@ -7,6 +7,9 @@ services:
       - "--api.dashboard=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      # File provider supplies the Mailcow routes (see ./dynamic/mailcow.yml).
+      - "--providers.file.directory=/dynamic"
+      - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
@@ -24,6 +27,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-letsencrypt:/letsencrypt
+      - ./dynamic:/dynamic:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.rule=Host(`traefik-bpvps1.${BASE_DOMAIN}`)"
@@ -38,6 +42,7 @@ services:
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
     networks:
       - proxy
+      - mailcow
 
 volumes:
   traefik-letsencrypt:
@@ -47,3 +52,8 @@ volumes:
 networks:
   proxy:
     external: true
+  # Lets Traefik reach the co-hosted Mailcow nginx (email.kaiteki.my).
+  # Created by the mailcow-dockerized stack at /opt/mailcow-dockerized.
+  mailcow:
+    external: true
+    name: mailcowdockerized_mailcow-network
