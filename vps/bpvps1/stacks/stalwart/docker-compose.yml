@@ -1,0 +1,66 @@
+# Self-hosted email for kaiteki.my — Stalwart mail server + Roundcube webmail,
+# co-hosted on BPVPS1 behind the existing Traefik. Replaces the earlier Mailcow stack.
+#
+# Admin UI : https://email.kaiteki.my   (Stalwart)
+# Webmail  : https://webmail.kaiteki.my (Roundcube)
+#
+# TLS: a single LE cert (email.kaiteki.my + webmail.kaiteki.my) is issued out-of-band
+# via Cloudflare DNS-01 (acme.sh, KAITEKI_CF_DNS_API_TOKEN) into ./certs and is used by
+# BOTH Stalwart (mail ports, set in the admin UI -> Settings -> TLS, reading the files)
+# AND Traefik (web UIs, file provider). See README.md.
+#
+# IMPORTANT: config.json (the storage pointer) is bind-mounted so a container recreate
+# does NOT wipe Stalwart back into bootstrap mode. Do not remove it.
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:latest
+    container_name: stalwart
+    restart: unless-stopped
+    environment:
+      # Fallback/recovery admin for the management API. Real value in stack .env (gitignored).
+      - STALWART_RECOVERY_ADMIN=admin:${STALWART_RECOVERY_PASS}
+    ports:
+      - "25:25"       # SMTP (inbound)
+      - "465:465"     # SMTPS (submission)
+      - "587:587"     # submission STARTTLS
+      - "143:143"     # IMAP STARTTLS
+      - "993:993"     # IMAPS
+      - "110:110"     # POP3
+      - "995:995"     # POP3S
+      - "4190:4190"   # ManageSieve
+      - "127.0.0.1:8090:8080"   # management API/UI (loopback only; Traefik serves it publicly)
+    volumes:
+      - stalwart-data:/opt/stalwart
+      - ./certs:/opt/stalwart/certs:ro            # LE cert from acme.sh (chown 2000:2000 to read)
+      - ./config.json:/etc/stalwart/config.json   # storage pointer — persistence-critical
+    networks:
+      mailnet:
+        # Lets Roundcube reach Stalwart over the internal net with a cert-matching name.
+        aliases:
+          - email.kaiteki.my
+
+  roundcube:
+    image: roundcube/roundcubemail:latest
+    container_name: roundcube
+    restart: unless-stopped
+    environment:
+      - ROUNDCUBEMAIL_DB_TYPE=sqlite
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://email.kaiteki.my   # -> stalwart via network alias, valid cert
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=ssl://email.kaiteki.my
+      - ROUNDCUBEMAIL_SMTP_PORT=465
+    volumes:
+      - roundcube-data:/var/www/html
+    networks:
+      - mailnet
+    depends_on:
+      - stalwart
+
+volumes:
+  stalwart-data:
+  roundcube-data:
+
+networks:
+  # Traefik joins this (external) to reach stalwart:8080 and roundcube:80.
+  mailnet:
+    name: stalwart_mailnet

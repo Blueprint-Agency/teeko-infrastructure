@@ -7,7 +7,7 @@ services:
       - "--api.dashboard=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      # File provider supplies the Mailcow routes (see ./dynamic/mailcow.yml).
+      # File provider supplies the Stalwart/Roundcube routes + the kaiteki.my cert.
       - "--providers.file.directory=/dynamic"
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
@@ -28,6 +28,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-letsencrypt:/letsencrypt
       - ./dynamic:/dynamic:ro
+      # Shared kaiteki.my cert (acme.sh DNS-01) used for the mail web UIs.
+      - /root/stacks/stalwart/certs:/certs:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dashboard.rule=Host(`traefik-bpvps1.${BASE_DOMAIN}`)"
@@ -42,7 +44,7 @@ services:
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
     networks:
       - proxy
-      - mailcow
+      - mailnet
 
 volumes:
   traefik-letsencrypt:
@@ -52,8 +54,8 @@ volumes:
 networks:
   proxy:
     external: true
-  # Lets Traefik reach the co-hosted Mailcow nginx (email.kaiteki.my).
-  # Created by the mailcow-dockerized stack at /opt/mailcow-dockerized.
-  mailcow:
+  # Lets Traefik reach the co-hosted Stalwart + Roundcube containers.
+  # Created by the stalwart stack at /root/stacks/stalwart.
+  mailnet:
     external: true
-    name: mailcowdockerized_mailcow-network
+    name: stalwart_mailnet

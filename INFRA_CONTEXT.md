@@ -81,9 +81,9 @@
 | `traefik` | Traefik reverse proxy (+ file provider for Mailcow) | — |
 | `kaiteki` | `kaiteki` (legacy static site) | `kaiteki.my` |
 | `wordpress` | `wordpress`, `wp-db` (MariaDB) | `blog.kaiteki.my` |
-| `mailcow` | Mailcow (self-hosted email, ~18 containers) at `/opt/mailcow-dockerized` | `email.kaiteki.my` |
+| `stalwart` | Stalwart mail server + Roundcube webmail (`/root/stacks/stalwart`) | `email.kaiteki.my`, `webmail.kaiteki.my` |
 
-> **Mailcow** is co-hosted behind Traefik: Mailcow self-issues its own LE cert (HTTP-01); Traefik forwards `email.kaiteki.my` `:80` and TLS-passthroughs `:443`. See `vps/bpvps1/stacks/mailcow/README.md`. DNS is the separate `kaiteki.my` Cloudflare account (`KAITEKI_CF_DNS_API_TOKEN`).
+> **Stalwart + Roundcube** co-hosted behind Traefik (replaced Mailcow). One LE cert (acme.sh Cloudflare DNS-01, `KAITEKI_CF_DNS_API_TOKEN`) is shared by Stalwart (mail TLS, set in its admin UI) and Traefik (web UIs, file provider). Stalwart config lives in its store; `config.json` is bind-mounted so a recreate doesn't re-trigger the setup wizard. DNS = separate `kaiteki.my` Cloudflare account. See `vps/bpvps1/stacks/stalwart/README.md`.
 
 ---
 
