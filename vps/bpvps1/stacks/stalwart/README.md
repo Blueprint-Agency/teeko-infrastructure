@@ -24,9 +24,16 @@ Stack dir on VPS: `/root/stacks/stalwart/`. Mail data in the `stalwart-data` vol
     otherwise the session advertises the wrong host and the webmail breaks.
   - `mail.kaiteki.my` is a **network alias on Traefik** (`../traefik/docker-compose.yml`) so the
     Bulwark container resolves it internally to Traefik → valid cert → `stalwart:8080`.
-  - The browser also calls JMAP **cross-origin** (`webmail.` → `mail.`), so Stalwart needs
-    **Permissive CORS enabled** (admin UI → Settings → HTTP Security → *Permissive CORS policy*).
-    Without it, login fails with "server is blocking cross-origin requests".
+  - The browser also calls JMAP **cross-origin** (`webmail.` → `mail.`, incl. `/.well-known/jmap`),
+    so **Traefik adds CORS** for the mail host (specific origin `https://webmail.kaiteki.my` +
+    `Allow-Credentials: true`, and it answers preflight) — see the `mail-cors` middleware in
+    `../traefik/dynamic/stalwart.yml`. Stalwart's own "Permissive CORS" is left **OFF**: it only
+    emits `*` (which browsers reject for credentialed / "Remember me" requests) and it doesn't
+    cover the `/.well-known/jmap` discovery redirect.
+  - Stalwart must trust the proxy: **Settings → Network → HTTP Server → "Obtain remote IP from
+    Forwarded header" = ON**, plus **Settings → Security → Allowed IPs → `172.16.0.0/16`**. Without
+    this, Stalwart's fail2ban sees every request as coming from Traefik's container IP, and a single
+    bot scan for `*/wp-*`/`*.php*` (HTTP "banned paths") bans the proxy → all mail web UIs return 502.
 
 ## TLS
 One LE cert for `mail.kaiteki.my` + `webmail.kaiteki.my`, issued **out-of-band via
@@ -56,8 +63,14 @@ PTR (Hostinger hPanel): `187.127.122.41` → **`mail.kaiteki.my`** (FCrDNS / del
   recreate wipes Stalwart back into the setup wizard (mail data survives, config lost).
 - **Most config lives in the store**, set via the admin UI. The v1.0 management REST API is
   OAuth-only and not the documented `/api/settings*` path — there's no easy scripting; use the UI.
-- The three settings the webmail depends on (above): **Default Hostname = mail.kaiteki.my**,
-  **Permissive CORS = on**, and the **TLS File** cert refs.
+- Stalwart settings the webmail depends on (all via the admin UI): **Default Hostname =
+  mail.kaiteki.my**, the **TLS File** cert refs, **"Obtain remote IP from Forwarded header" = ON**,
+  and an **Allowed IPs** entry `172.16.0.0/16`. CORS is handled by **Traefik** (Stalwart Permissive
+  CORS stays OFF).
+- ⚠️ **fail2ban behind a reverse proxy** — Stalwart bans by source IP; behind Traefik every request
+  looks like it comes from Traefik's container IP, so a bot scan for an HTTP "banned path"
+  (`*/wp-*`, `*.php*`, …) bans the proxy and **every mail web UI 502s**. The two settings above fix
+  it: XFF trust makes bans use the real client IP, and the Allowed-IPs entry exempts the proxy.
 - Old DKIM verifiers (e.g. port25) can't evaluate Ed25519 → harmless `permerror`; RSA passes.
 
 ## Ops

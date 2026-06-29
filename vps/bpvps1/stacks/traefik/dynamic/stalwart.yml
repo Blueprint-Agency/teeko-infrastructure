@@ -6,16 +6,44 @@
 # only covers teeko.ai, not kaiteki.my). Traefik reaches the containers over the external
 # stalwart_mailnet network (see traefik compose). The mail.kaiteki.my network alias on
 # Traefik (compose) lets Bulwark reach the Stalwart JMAP host internally with a valid cert.
+#
+# CORS: Bulwark's BROWSER calls JMAP cross-origin (webmail. -> mail.), including
+# /.well-known/jmap. Stalwart's own "permissive CORS" only emits `*` and does NOT cover the
+# .well-known/jmap discovery redirect, which breaks login. So Traefik owns CORS for the mail
+# host: it reflects the specific webmail origin + allows credentials, and answers preflight
+# directly. (Stalwart's permissive CORS must be OFF so we don't emit duplicate ACAO headers.)
 tls:
   certificates:
     - certFile: /certs/fullchain.pem
       keyFile: /certs/key.pem
 http:
+  middlewares:
+    mail-cors:
+      headers:
+        accessControlAllowOriginList:
+          - "https://webmail.kaiteki.my"
+        accessControlAllowCredentials: true
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - Accept
+          - X-Requested-With
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - PUT
+          - DELETE
+          - HEAD
+          - OPTIONS
+        accessControlMaxAge: 100
+        addVaryHeader: true
   routers:
     stalwart-admin:
       entryPoints: [websecure]
       rule: "Host(`mail.kaiteki.my`)"
       service: stalwart-admin
+      middlewares: [mail-cors]
       tls: {}
     bulwark:
       entryPoints: [websecure]
