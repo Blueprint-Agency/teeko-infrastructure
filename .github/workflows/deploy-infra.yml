@@ -367,7 +367,7 @@ jobs:
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
           TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
           GATEWAY_MASTERPASS: ${{ secrets.GATEWAY_MASTERPASS }}
-          GA4_MCP_AUTH: ${{ secrets.GA4_MCP_AUTH }}
+          GA4_MCP_PATH_TOKEN: ${{ secrets.GA4_MCP_PATH_TOKEN }}
           GA4_MCP_SA_KEY_JSON: ${{ secrets.GA4_MCP_SA_KEY_JSON }}
           GA4_MCP_PROJECT_ID: ${{ vars.GA4_MCP_PROJECT_ID }}
           N8N_DB_USER: ${{ vars.N8N_DB_USER }}
@@ -380,10 +380,9 @@ jobs:
           REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
           ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
-          ESCAPED_GA4_AUTH=$(printf '%s' "$GA4_MCP_AUTH" | sed 's/\$/\$\$/g')
 
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGA4_MCP_AUTH=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$ESCAPED_GA4_AUTH" | base64 -w0)
+          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGA4_MCP_PATH_TOKEN=%s\n' \
+            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GA4_MCP_PATH_TOKEN" | base64 -w0)
 
           # GOOGLE_APPLICATION_CREDENTIALS path matches where the sa-key.json is written below
           GA4_ENV=$(printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\nGOOGLE_PROJECT_ID=%s\n' \

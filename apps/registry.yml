@@ -133,9 +133,13 @@ mcp_servers:
     notes: "Google Analytics MCP (github.com/googleanalytics/google-analytics-mcp), wrapped
       with mcp-proxy (github.com/sparfenyuk/mcp-proxy) since upstream is stdio-only with no
       HTTP transport or official image. Built by .github/workflows/build-ga4-mcp.yml (no
-      version pins — rerun manually to pick up upstream updates). Traefik basic-auth gated
-      (GA4_MCP_AUTH). Needs a GCP service account with GA4 property access, key mounted at
-      credentials/sa-key.json (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_PROJECT_ID)."
+      version pins — rerun manually to pick up upstream updates). Access control is a
+      secret path, not Traefik auth (Claude.ai's custom-connector UI takes a URL only, no
+      headers): mcp-proxy --named-server mounts at /servers/<GA4_MCP_PATH_TOKEN>/, full
+      client URL is https://ga4.teeko.ai/servers/<token>/sse. /status is blocked at Traefik
+      since it would otherwise echo the token back. Needs a GCP service account with GA4
+      property access, key mounted at credentials/sa-key.json (GOOGLE_APPLICATION_CREDENTIALS
+      + GOOGLE_PROJECT_ID)."
 
 tools:
   - name: pgadmin

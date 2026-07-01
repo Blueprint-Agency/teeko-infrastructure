@@ -4,8 +4,14 @@
 #
 # Auth into GA4 is via a service account key mounted at ./credentials/sa-key.json
 # (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_PROJECT_ID come from .env.ga4-mcp).
-# The endpoint itself is Traefik basic-auth gated (GA4_MCP_AUTH, from the shared .env)
-# since it's public and can query GA4 data.
+#
+# Access control: Claude.ai's custom-connector UI only takes a URL (+ optional OAuth
+# client id/secret) - no custom headers - so Traefik basic auth doesn't work there.
+# Instead the secret IS the path: --named-server mounts the server under
+# /servers/<name>/, and <name> is a random token (GA4_MCP_PATH_TOKEN) rather than a
+# friendly name. Full client URL: https://ga4.<domain>/servers/<token>/sse
+# The /status endpoint is blocked below because it echoes server names, which would
+# leak the token to anyone who requests it.
 services:
   ga4-mcp:
     image: blueprintagency/ga4-mcp:latest
@@ -13,17 +19,26 @@ services:
     container_name: ga4-mcp
     restart: unless-stopped
     env_file: .env.ga4-mcp
-    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--", "analytics-mcp"]
+    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--named-server", "${GA4_MCP_PATH_TOKEN}", "analytics-mcp"]
     volumes:
       - ./credentials:/credentials:ro
     labels:
       - "traefik.enable=true"
+      - "traefik.http.services.ga4-mcp.loadbalancer.server.port=8080"
+      # Catch-all: serves /servers/<token>/sse (and everything else).
       - "traefik.http.routers.ga4-mcp.rule=Host(`ga4.${BASE_DOMAIN}`)"
       - "traefik.http.routers.ga4-mcp.entrypoints=websecure"
       - "traefik.http.routers.ga4-mcp.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ga4-mcp.middlewares=ga4-auth"
-      - "traefik.http.middlewares.ga4-auth.basicauth.users=${GA4_MCP_AUTH}"
-      - "traefik.http.services.ga4-mcp.loadbalancer.server.port=8080"
+      - "traefik.http.routers.ga4-mcp.priority=1"
+      - "traefik.http.routers.ga4-mcp.service=ga4-mcp"
+      # Higher-priority router that blocks /status specifically (leaks server names).
+      - "traefik.http.routers.ga4-mcp-status.rule=Host(`ga4.${BASE_DOMAIN}`) && Path(`/status`)"
+      - "traefik.http.routers.ga4-mcp-status.entrypoints=websecure"
+      - "traefik.http.routers.ga4-mcp-status.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ga4-mcp-status.priority=10"
+      - "traefik.http.routers.ga4-mcp-status.service=ga4-mcp"
+      - "traefik.http.routers.ga4-mcp-status.middlewares=ga4-deny-all"
+      - "traefik.http.middlewares.ga4-deny-all.ipallowlist.sourcerange=127.0.0.1/32"
     networks:
       - proxy
 
