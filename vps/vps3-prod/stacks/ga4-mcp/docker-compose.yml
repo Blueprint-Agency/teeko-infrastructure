@@ -26,7 +26,11 @@ services:
     container_name: ga4-mcp
     restart: unless-stopped
     env_file: .env.ga4-mcp
-    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--allow-origin=*", "--named-server", "${GA4_MCP_PATH_TOKEN}", "analytics-mcp"]
+    # --stateless: each HTTP request is self-contained (no server-side session to keep
+    # alive between requests). Remote browser clients like Claude.ai don't reliably
+    # thread the Mcp-Session-Id back, which made every POST spin up a new session and
+    # the handshake never completed. Stateless removes that requirement.
+    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--stateless", "--allow-origin=*", "--named-server", "${GA4_MCP_PATH_TOKEN}", "analytics-mcp"]
     volumes:
       - ./credentials:/credentials:ro
     labels:
