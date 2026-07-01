@@ -136,8 +136,10 @@ mcp_servers:
       version pins — rerun manually to pick up upstream updates). Access control is a
       secret path, not Traefik auth (Claude.ai's custom-connector UI takes a URL only, no
       headers): mcp-proxy --named-server mounts at /servers/<GA4_MCP_PATH_TOKEN>/, full
-      client URL is https://ga4.teeko.ai/servers/<token>/sse. /status is blocked at Traefik
-      since it would otherwise echo the token back. Needs a GCP service account with GA4
+      client URL is https://ga4.teeko.ai/servers/<token>/mcp (streamable-HTTP; Claude.ai
+      does not use legacy SSE). --allow-origin=* enables CORS so the browser-based connector
+      can read the Mcp-Session-Id header. /status is blocked at Traefik since it would
+      otherwise echo the token back. Needs a GCP service account with GA4
       property access, key mounted at credentials/sa-key.json (GOOGLE_APPLICATION_CREDENTIALS
       + GOOGLE_PROJECT_ID)."
 

@@ -9,9 +9,16 @@
 # client id/secret) - no custom headers - so Traefik basic auth doesn't work there.
 # Instead the secret IS the path: --named-server mounts the server under
 # /servers/<name>/, and <name> is a random token (GA4_MCP_PATH_TOKEN) rather than a
-# friendly name. Full client URL: https://ga4.<domain>/servers/<token>/sse
+# friendly name. Claude.ai speaks streamable-HTTP (not legacy SSE), so the client URL
+# is the /mcp endpoint: https://ga4.<domain>/servers/<token>/mcp
 # The /status endpoint is blocked below because it echoes server names, which would
 # leak the token to anyone who requests it.
+#
+# --allow-origin=* enables mcp-proxy's CORS middleware, which emits
+# Access-Control-Expose-Headers: Mcp-Session-Id. Claude.ai's connector is a browser
+# client; without this it can't read the session id from the initialize response and
+# aborts mid-handshake. '*' is safe here because the secret path token - not CORS - is
+# the real access boundary, and no cookies/credentials are involved.
 services:
   ga4-mcp:
     image: blueprintagency/ga4-mcp:latest
@@ -19,13 +26,13 @@ services:
     container_name: ga4-mcp
     restart: unless-stopped
     env_file: .env.ga4-mcp
-    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--named-server", "${GA4_MCP_PATH_TOKEN}", "analytics-mcp"]
+    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--allow-origin=*", "--named-server", "${GA4_MCP_PATH_TOKEN}", "analytics-mcp"]
     volumes:
       - ./credentials:/credentials:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.services.ga4-mcp.loadbalancer.server.port=8080"
-      # Catch-all: serves /servers/<token>/sse (and everything else).
+      # Catch-all: serves /servers/<token>/mcp (and everything else).
       - "traefik.http.routers.ga4-mcp.rule=Host(`ga4.${BASE_DOMAIN}`)"
       - "traefik.http.routers.ga4-mcp.entrypoints=websecure"
       - "traefik.http.routers.ga4-mcp.tls.certresolver=letsencrypt"
