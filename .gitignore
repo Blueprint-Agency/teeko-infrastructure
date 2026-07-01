@@ -1,8 +1,15 @@
 # Environment files (secrets)
 .env
+.env.*
+!.env.example
 *.env.local
 *.env.production
 *.env.staging
+
+# Per-stack service env files and mounted service-account keys are rendered on the
+# VPS at deploy time and must never be committed (belt-and-suspenders alongside the
+# deploy rsync --exclude rules).
+**/credentials/sa-key.json
 
 # Claude Code local settings (contains tokens)
 .claude/
