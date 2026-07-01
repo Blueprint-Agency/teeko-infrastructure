@@ -143,6 +143,29 @@ mcp_servers:
       property access, key mounted at credentials/sa-key.json (GOOGLE_APPLICATION_CREDENTIALS
       + GOOGLE_PROJECT_ID)."
 
+  - name: gsc-mcp
+    image: blueprintagency/gsc-mcp
+    tags:
+      production: latest
+    stack: gsc-mcp
+    vps:
+      production: vps3-prod
+    port: 8080
+    domain:
+      production: gsc.teeko.ai
+    notes: "Google Search Console MCP (github.com/AminForou/mcp-gsc, PyPI mcp-search-console),
+      wrapped with mcp-proxy (upstream is stdio-only, no HTTP transport or image) and fronted by
+      an OAuth 2.1 gateway (hyprmcp mcp-gateway 0.4.0 + self-hosted Dex 2.44.0) so it works as a
+      claude.ai web custom connector. Single public host gsc.teeko.ai: Dex OAuth paths (Traefik
+      priority 100) -> gsc-dex:5556; everything else incl. /mcp (priority 1) -> gsc-gateway:9000,
+      which enforces OAuth Bearer and reverse-proxies in-network to gsc-mcp:8080/servers/<token>/mcp/.
+      The gsc-mcp backend has NO public route. Client URL: https://gsc.teeko.ai/mcp. Backend image
+      built by .github/workflows/build-gsc-mcp.yml (no version pins). Google auth via service account
+      (reuses the ga4 SA): GSC_CREDENTIALS_PATH=/credentials/sa-key.json + GSC_SKIP_OAUTH=true; needs
+      Search Console API enabled + the SA added as a user on the GSC property. Dex login via a static
+      password (GSC_DEX_ADMIN_EMAIL / GSC_DEX_ADMIN_HASH). Secrets in vps3-prod env: GSC_MCP_PATH_TOKEN,
+      GSC_MCP_SA_KEY_JSON, GSC_DEX_ADMIN_HASH."
+
 tools:
   - name: pgadmin
     image: dpage/pgadmin4:latest
