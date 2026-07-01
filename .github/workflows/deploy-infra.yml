@@ -370,6 +370,10 @@ jobs:
           GA4_MCP_PATH_TOKEN: ${{ secrets.GA4_MCP_PATH_TOKEN }}
           GA4_MCP_SA_KEY_JSON: ${{ secrets.GA4_MCP_SA_KEY_JSON }}
           GA4_MCP_PROJECT_ID: ${{ vars.GA4_MCP_PROJECT_ID }}
+          GSC_MCP_PATH_TOKEN: ${{ secrets.GSC_MCP_PATH_TOKEN }}
+          GSC_MCP_SA_KEY_JSON: ${{ secrets.GSC_MCP_SA_KEY_JSON }}
+          GSC_DEX_ADMIN_HASH: ${{ secrets.GSC_DEX_ADMIN_HASH }}
+          GSC_DEX_ADMIN_EMAIL: ${{ vars.GSC_DEX_ADMIN_EMAIL }}
           N8N_DB_USER: ${{ vars.N8N_DB_USER }}
           N8N_DB_PASSWORD: ${{ secrets.N8N_DB_PASSWORD }}
           N8N_DB_NAME: ${{ vars.N8N_DB_NAME }}
@@ -389,6 +393,20 @@ jobs:
             "/credentials/sa-key.json" "$GA4_MCP_PROJECT_ID" | base64 -w0)
 
           GA4_SA_KEY=$(printf '%s' "$GA4_MCP_SA_KEY_JSON" | base64 -w0)
+
+          GSC_ENV=$(printf 'GSC_CREDENTIALS_PATH=%s\nGSC_SKIP_OAUTH=%s\n' \
+            "/credentials/sa-key.json" "true" | base64 -w0)
+
+          GSC_SA_KEY=$(printf '%s' "$GSC_MCP_SA_KEY_JSON" | base64 -w0)
+
+          # Full gateway-config.yaml, token substituted as a printf ARG (literal, no shell expansion).
+          GSC_GATEWAY_CFG=$(printf 'host: https://gsc.%s/\nauthorization:\n  server: http://gsc-dex:5556/\n  authorizationProxyEnabled: true\n  serverMetadataProxyEnabled: true\n  dynamicClientRegistration:\n    enabled: true\n    publicClient: true\ndexGRPCClient:\n  addr: gsc-dex:5557\nproxy:\n  - path: /mcp\n    http:\n      url: http://gsc-mcp:8080/servers/%s/mcp/\n    authentication:\n      enabled: true\n' \
+            "$BASE_DOMAIN" "$GSC_MCP_PATH_TOKEN" | base64 -w0)
+
+          # Full dex-config.yaml; email + bcrypt hash passed as printf ARGs so the $ in the
+          # hash stays literal. block-style allowedOrigins avoids quoting a flow sequence.
+          GSC_DEX_CFG=$(printf 'issuer: https://gsc.%s\nweb:\n  http: 0.0.0.0:5556\n  allowedOrigins:\n    - "*"\ngrpc:\n  addr: 0.0.0.0:5557\nstorage:\n  type: memory\noauth2:\n  skipApprovalScreen: true\nenablePasswordDB: true\nstaticPasswords:\n  - email: "%s"\n    hash: "%s"\n    username: admin\n    userID: "7f3a1e2c-9b4d-4a6e-8c1f-2d5b7e9a0c34"\n' \
+            "$BASE_DOMAIN" "$GSC_DEX_ADMIN_EMAIL" "$GSC_DEX_ADMIN_HASH" | base64 -w0)
 
           N8N_APP_ENV=$(printf '%s\n' \
             "DB_TYPE=postgresdb" "DB_POSTGRESDB_HOST=db-n8n" "DB_POSTGRESDB_PORT=5432" \
@@ -416,6 +434,11 @@ jobs:
           GA4_SA_KEY='$GA4_SA_KEY'
           N8N_APP_ENV='$N8N_APP_ENV'
           N8N_DB_ENV='$N8N_DB_ENV'
+          GSC_ENV='$GSC_ENV'
+          GSC_SA_KEY='$GSC_SA_KEY'
+          GSC_GATEWAY_CFG='$GSC_GATEWAY_CFG'
+          GSC_DEX_CFG='$GSC_DEX_CFG'
+          GSC_MCP_PATH_TOKEN='$GSC_MCP_PATH_TOKEN'
 
           # App-managed stacks: infra rsyncs the compose file but the app's own
           # workflow writes .env.* and runs 'docker compose up'. Skip the up here.
@@ -440,6 +463,14 @@ jobs:
                 echo \"\$GA4_SA_KEY\" | base64 -d > /root/stacks/ga4-mcp/credentials/sa-key.json
                 chmod 644 /root/stacks/ga4-mcp/credentials/sa-key.json
                 echo \"\$GA4_ENV\"    | base64 -d > /root/stacks/ga4-mcp/.env.ga4-mcp ;;
+              gsc-mcp)
+                mkdir -p /root/stacks/gsc-mcp/credentials
+                echo \"\$GSC_SA_KEY\"      | base64 -d > /root/stacks/gsc-mcp/credentials/sa-key.json
+                chmod 644 /root/stacks/gsc-mcp/credentials/sa-key.json
+                echo \"\$GSC_ENV\"         | base64 -d > /root/stacks/gsc-mcp/.env.gsc-mcp
+                echo \"GSC_MCP_PATH_TOKEN=\$GSC_MCP_PATH_TOKEN\" >> /root/stacks/gsc-mcp/.env
+                echo \"\$GSC_GATEWAY_CFG\" | base64 -d > /root/stacks/gsc-mcp/gateway-config.yaml
+                echo \"\$GSC_DEX_CFG\"     | base64 -d > /root/stacks/gsc-mcp/dex-config.yaml ;;
             esac
             cd /root/stacks/\$stack
             docker compose up -d --remove-orphans
