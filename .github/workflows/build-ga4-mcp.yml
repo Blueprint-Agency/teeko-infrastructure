@@ -1,0 +1,44 @@
+name: Build ga4-mcp Image
+
+# Builds and pushes the ga4-mcp image (mcp-proxy + analytics-mcp) to DockerHub.
+# Unlike the app repos, this Dockerfile lives in-repo since it's just a thin wrapper
+# around two upstream packages — so infra owns its own build/push step here.
+#
+# The Dockerfile has no version pins (always pulls latest mcp-proxy base image and
+# latest analytics-mcp from PyPI), so run this manually (workflow_dispatch) whenever
+# you want to pick up upstream updates without touching the Dockerfile.
+#
+# deploy-infra.yml picks up the new tag on the next push that touches vps/vps3-prod/**
+# (pull_policy: always means `docker compose up -d` re-pulls it).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vps/vps3-prod/stacks/ga4-mcp/Dockerfile'
+      - '.github/workflows/build-ga4-mcp.yml'
+  workflow_dispatch: {}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: vps/vps3-prod/stacks/ga4-mcp
+          push: true
+          tags: |
+            blueprintagency/ga4-mcp:latest
+            blueprintagency/ga4-mcp:${{ github.sha }}

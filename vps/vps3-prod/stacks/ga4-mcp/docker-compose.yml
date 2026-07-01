@@ -1,0 +1,32 @@
+# Google Analytics MCP server (https://github.com/googleanalytics/google-analytics-mcp),
+# wrapped with mcp-proxy (https://github.com/sparfenyuk/mcp-proxy) since upstream only
+# speaks MCP-over-stdio and ships no HTTP transport or container image.
+#
+# Auth into GA4 is via a service account key mounted at ./credentials/sa-key.json
+# (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_PROJECT_ID come from .env.ga4-mcp).
+# The endpoint itself is Traefik basic-auth gated (GA4_MCP_AUTH, from the shared .env)
+# since it's public and can query GA4 data.
+services:
+  ga4-mcp:
+    image: blueprintagency/ga4-mcp:latest
+    pull_policy: always
+    container_name: ga4-mcp
+    restart: unless-stopped
+    env_file: .env.ga4-mcp
+    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--", "analytics-mcp"]
+    volumes:
+      - ./credentials:/credentials:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ga4-mcp.rule=Host(`ga4.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.ga4-mcp.entrypoints=websecure"
+      - "traefik.http.routers.ga4-mcp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ga4-mcp.middlewares=ga4-auth"
+      - "traefik.http.middlewares.ga4-auth.basicauth.users=${GA4_MCP_AUTH}"
+      - "traefik.http.services.ga4-mcp.loadbalancer.server.port=8080"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true

@@ -119,6 +119,24 @@ n8n_instances:
     db: local-postgres       # n8n requires local Postgres, not Supabase
     notes: "n8n production instance"
 
+mcp_servers:
+  - name: ga4-mcp
+    image: blueprintagency/ga4-mcp
+    tags:
+      production: latest
+    stack: ga4-mcp
+    vps:
+      production: vps3-prod
+    port: 8080
+    domain:
+      production: ga4.teeko.ai
+    notes: "Google Analytics MCP (github.com/googleanalytics/google-analytics-mcp), wrapped
+      with mcp-proxy (github.com/sparfenyuk/mcp-proxy) since upstream is stdio-only with no
+      HTTP transport or official image. Built by .github/workflows/build-ga4-mcp.yml (no
+      version pins — rerun manually to pick up upstream updates). Traefik basic-auth gated
+      (GA4_MCP_AUTH). Needs a GCP service account with GA4 property access, key mounted at
+      credentials/sa-key.json (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_PROJECT_ID)."
+
 tools:
   - name: pgadmin
     image: dpage/pgadmin4:latest

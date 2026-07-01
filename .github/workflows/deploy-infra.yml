@@ -367,6 +367,9 @@ jobs:
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
           TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
           GATEWAY_MASTERPASS: ${{ secrets.GATEWAY_MASTERPASS }}
+          GA4_MCP_AUTH: ${{ secrets.GA4_MCP_AUTH }}
+          GA4_MCP_SA_KEY_JSON: ${{ secrets.GA4_MCP_SA_KEY_JSON }}
+          GA4_MCP_PROJECT_ID: ${{ vars.GA4_MCP_PROJECT_ID }}
           N8N_DB_USER: ${{ vars.N8N_DB_USER }}
           N8N_DB_PASSWORD: ${{ secrets.N8N_DB_PASSWORD }}
           N8N_DB_NAME: ${{ vars.N8N_DB_NAME }}
@@ -377,9 +380,16 @@ jobs:
           REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
           ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
+          ESCAPED_GA4_AUTH=$(printf '%s' "$GA4_MCP_AUTH" | sed 's/\$/\$\$/g')
 
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" | base64 -w0)
+          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGA4_MCP_AUTH=%s\n' \
+            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$ESCAPED_GA4_AUTH" | base64 -w0)
+
+          # GOOGLE_APPLICATION_CREDENTIALS path matches where the sa-key.json is written below
+          GA4_ENV=$(printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\nGOOGLE_PROJECT_ID=%s\n' \
+            "/credentials/sa-key.json" "$GA4_MCP_PROJECT_ID" | base64 -w0)
+
+          GA4_SA_KEY=$(printf '%s' "$GA4_MCP_SA_KEY_JSON" | base64 -w0)
 
           N8N_APP_ENV=$(printf '%s\n' \
             "DB_TYPE=postgresdb" "DB_POSTGRESDB_HOST=db-n8n" "DB_POSTGRESDB_PORT=5432" \
@@ -403,6 +413,8 @@ jobs:
           REMOVE='$REMOVE'
           BASE_ENV='$BASE_ENV'
           GATEWAY_ENV='$GATEWAY_ENV'
+          GA4_ENV='$GA4_ENV'
+          GA4_SA_KEY='$GA4_SA_KEY'
           N8N_APP_ENV='$N8N_APP_ENV'
           N8N_DB_ENV='$N8N_DB_ENV'
 
@@ -424,6 +436,11 @@ jobs:
                 echo \"\$N8N_DB_ENV\"  | base64 -d > /root/stacks/n8n/.env.db-n8n ;;
               tools)
                 echo \"\$GATEWAY_ENV\" | base64 -d > /root/stacks/tools/.env.gateway ;;
+              ga4-mcp)
+                mkdir -p /root/stacks/ga4-mcp/credentials
+                echo \"\$GA4_SA_KEY\" | base64 -d > /root/stacks/ga4-mcp/credentials/sa-key.json
+                chmod 644 /root/stacks/ga4-mcp/credentials/sa-key.json
+                echo \"\$GA4_ENV\"    | base64 -d > /root/stacks/ga4-mcp/.env.ga4-mcp ;;
             esac
             cd /root/stacks/\$stack
             docker compose up -d --remove-orphans
