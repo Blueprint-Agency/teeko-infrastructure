@@ -1,0 +1,21 @@
+# TEMPLATE — the deploy workflow (deploy-infra.yml) overwrites this file on VPS3 with the
+# @@GSC_DEX_ADMIN_EMAIL@@ / @@GSC_DEX_ADMIN_HASH@@ markers replaced by real values.
+# Do not put a real bcrypt hash here. storage:memory is intentional (matches ga4); DCR
+# re-registers clients on connect. issuer MUST equal the public gateway host.
+issuer: https://gsc.teeko.ai
+web:
+  http: 0.0.0.0:5556
+  allowedOrigins:
+    - "*"
+grpc:
+  addr: 0.0.0.0:5557
+storage:
+  type: memory
+oauth2:
+  skipApprovalScreen: true
+enablePasswordDB: true
+staticPasswords:
+  - email: "@@GSC_DEX_ADMIN_EMAIL@@"
+    hash: "@@GSC_DEX_ADMIN_HASH@@"
+    username: admin
+    userID: "7f3a1e2c-9b4d-4a6e-8c1f-2d5b7e9a0c34"

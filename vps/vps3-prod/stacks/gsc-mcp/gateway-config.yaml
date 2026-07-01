@@ -1,0 +1,18 @@
+# TEMPLATE — the deploy workflow (deploy-infra.yml) overwrites this file on VPS3 with the
+# @@GSC_MCP_PATH_TOKEN@@ marker replaced by the real secret. Do not put real secrets here.
+host: https://gsc.teeko.ai/
+authorization:
+  server: http://gsc-dex:5556/
+  authorizationProxyEnabled: true
+  serverMetadataProxyEnabled: true
+  dynamicClientRegistration:
+    enabled: true
+    publicClient: true
+dexGRPCClient:
+  addr: gsc-dex:5557
+proxy:
+  - path: /mcp
+    http:
+      url: http://gsc-mcp:8080/servers/@@GSC_MCP_PATH_TOKEN@@/mcp/
+    authentication:
+      enabled: true

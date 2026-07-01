@@ -1,0 +1,84 @@
+# Google Search Console MCP (github.com/AminForou/mcp-gsc, PyPI mcp-search-console),
+# wrapped with mcp-proxy (upstream is stdio-only, no HTTP transport or image) and fronted by
+# an OAuth 2.1 gateway (hyprmcp mcp-gateway) + self-hosted Dex IdP so it can be added as a
+# claude.ai web custom connector. Client URL: https://gsc.<BASE_DOMAIN>/mcp
+#
+# Single public host gsc.<BASE_DOMAIN>:
+#   - Dex OAuth endpoints (Traefik priority 100 router) -> gsc-dex:5556
+#   - everything else incl. /mcp, /oauth/*, /.well-known/oauth-* (priority 1) -> gsc-gateway:9000
+# The gsc-mcp backend has NO public route; the gateway reaches it in-network at
+# gsc-mcp:8080/servers/<token>/mcp/ and enforces OAuth Bearer.
+#
+# .env, .env.gsc-mcp, credentials/sa-key.json, and the rendered gateway-config.yaml /
+# dex-config.yaml are written at deploy time by .github/workflows/deploy-infra.yml (secrets
+# injected via base64 over SSH). The gateway-config.yaml / dex-config.yaml committed here carry
+# @@PLACEHOLDER@@ markers and are overwritten on deploy.
+services:
+  # Backend: mcp-proxy wrapping the stdio mcp-gsc server. Internal only (no Traefik route).
+  gsc-mcp:
+    image: blueprintagency/gsc-mcp:latest
+    pull_policy: always
+    container_name: gsc-mcp
+    restart: unless-stopped
+    env_file: .env.gsc-mcp
+    command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--stateless", "--allow-origin=*", "--named-server", "${GSC_MCP_PATH_TOKEN}", "mcp-gsc"]
+    volumes:
+      - ./credentials:/credentials:ro
+    networks:
+      - proxy
+
+  # OAuth 2.1 gateway (DCR + PKCE). Public catch-all on gsc.<domain>; reverse-proxies /mcp.
+  gsc-gateway:
+    image: ghcr.io/hyprmcp/mcp-gateway:0.4.0
+    pull_policy: always
+    container_name: gsc-gateway
+    restart: unless-stopped
+    command: ["serve", "--config", "/opt/config.yaml", "-v", "2"]
+    volumes:
+      - ./gateway-config.yaml:/opt/config.yaml:ro
+    depends_on:
+      gsc-dex:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.gsc-gateway.loadbalancer.server.port=9000"
+      - "traefik.http.routers.gscgw.rule=Host(`gsc.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.gscgw.entrypoints=websecure"
+      - "traefik.http.routers.gscgw.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.gscgw.priority=1"
+      - "traefik.http.routers.gscgw.service=gsc-gateway"
+    networks:
+      - proxy
+
+  # Self-hosted Dex IdP. Serves its OAuth endpoints on gsc.<domain> via the priority-100 router.
+  gsc-dex:
+    image: ghcr.io/hyprmcp/dex:2.44.0-alpine
+    pull_policy: always
+    container_name: gsc-dex
+    restart: unless-stopped
+    # Bypass the upstream docker-entrypoint: it does $-env-expansion on the config and
+    # mangles the $ chars in the bcrypt hash. Run dex directly instead.
+    entrypoint: ["dex"]
+    command: ["serve", "/config.yaml"]
+    volumes:
+      - ./dex-config.yaml:/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5556/.well-known/openid-configuration"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.gsc-dex.loadbalancer.server.port=5556"
+      - "traefik.http.routers.gscgw-dex.rule=Host(`gsc.${BASE_DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/token`) || PathPrefix(`/keys`) || PathPrefix(`/approval`) || PathPrefix(`/callback`) || PathPrefix(`/device`) || PathPrefix(`/theme`) || PathPrefix(`/static`) || Path(`/.well-known/openid-configuration`))"
+      - "traefik.http.routers.gscgw-dex.entrypoints=websecure"
+      - "traefik.http.routers.gscgw-dex.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.gscgw-dex.priority=100"
+      - "traefik.http.routers.gscgw-dex.service=gsc-dex"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
