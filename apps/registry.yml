@@ -133,15 +133,14 @@ mcp_servers:
     notes: "Google Analytics MCP (github.com/googleanalytics/google-analytics-mcp), wrapped
       with mcp-proxy (github.com/sparfenyuk/mcp-proxy) since upstream is stdio-only with no
       HTTP transport or official image. Built by .github/workflows/build-ga4-mcp.yml (no
-      version pins — rerun manually to pick up upstream updates). Access control is a
-      secret path, not Traefik auth (Claude.ai's custom-connector UI takes a URL only, no
-      headers): mcp-proxy --named-server mounts at /servers/<GA4_MCP_PATH_TOKEN>/, full
-      client URL is https://ga4.teeko.ai/servers/<token>/mcp (streamable-HTTP; Claude.ai
-      does not use legacy SSE). --allow-origin=* enables CORS so the browser-based connector
-      can read the Mcp-Session-Id header. /status is blocked at Traefik since it would
-      otherwise echo the token back. Needs a GCP service account with GA4
-      property access, key mounted at credentials/sa-key.json (GOOGLE_APPLICATION_CREDENTIALS
-      + GOOGLE_PROJECT_ID)."
+      version pins — rerun manually to pick up upstream updates). Fronted by an OAuth 2.1
+      gateway (hyprmcp mcp-gateway 0.4.0 + self-hosted Dex 2.44.0) so it works as a claude.ai
+      web custom connector. Single public host ga4.teeko.ai: Dex OAuth paths (Traefik priority
+      100) -> ga4-dex:5556; everything else incl. /mcp (priority 1) -> ga4-gateway:9000, which
+      enforces OAuth Bearer and reverse-proxies in-network to ga4-mcp:8080/servers/<token>/mcp/.
+      The ga4-mcp backend has NO public route. Client URL: https://ga4.teeko.ai/mcp. Needs a GCP
+      service account with GA4 property access, key mounted at credentials/sa-key.json
+      (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_PROJECT_ID)."
 
   - name: gsc-mcp
     image: blueprintagency/gsc-mcp
@@ -163,8 +162,8 @@ mcp_servers:
       built by .github/workflows/build-gsc-mcp.yml (no version pins). Google auth via service account
       (reuses the ga4 SA): GSC_CREDENTIALS_PATH=/credentials/sa-key.json + GSC_SKIP_OAUTH=true; needs
       Search Console API enabled + the SA added as a user on the GSC property. Dex login via a static
-      password (GSC_DEX_ADMIN_EMAIL / GSC_DEX_ADMIN_HASH). Secrets in vps3-prod env: GSC_MCP_PATH_TOKEN,
-      GSC_MCP_SA_KEY_JSON, GSC_DEX_ADMIN_HASH."
+      password (MCP_DEX_ADMIN_EMAIL / MCP_DEX_ADMIN_HASH, shared with ga4-mcp gateway). Secrets in
+      vps3-prod env: GSC_MCP_PATH_TOKEN, GSC_MCP_SA_KEY_JSON."
 
 tools:
   - name: pgadmin
