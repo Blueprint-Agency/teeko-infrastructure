@@ -372,8 +372,8 @@ jobs:
           GA4_MCP_PROJECT_ID: ${{ vars.GA4_MCP_PROJECT_ID }}
           GSC_MCP_PATH_TOKEN: ${{ secrets.GSC_MCP_PATH_TOKEN }}
           GSC_MCP_SA_KEY_JSON: ${{ secrets.GSC_MCP_SA_KEY_JSON }}
-          GSC_DEX_ADMIN_HASH: ${{ secrets.GSC_DEX_ADMIN_HASH }}
-          GSC_DEX_ADMIN_EMAIL: ${{ vars.GSC_DEX_ADMIN_EMAIL }}
+          MCP_DEX_ADMIN_HASH: ${{ secrets.MCP_DEX_ADMIN_HASH }}
+          MCP_DEX_ADMIN_EMAIL: ${{ vars.MCP_DEX_ADMIN_EMAIL }}
           N8N_DB_USER: ${{ vars.N8N_DB_USER }}
           N8N_DB_PASSWORD: ${{ secrets.N8N_DB_PASSWORD }}
           N8N_DB_NAME: ${{ vars.N8N_DB_NAME }}
@@ -405,8 +405,14 @@ jobs:
 
           # Full dex-config.yaml; email + bcrypt hash passed as printf ARGs so the $ in the
           # hash stays literal. block-style allowedOrigins avoids quoting a flow sequence.
-          GSC_DEX_CFG=$(printf 'issuer: https://gsc.%s\nweb:\n  http: 0.0.0.0:5556\n  allowedOrigins:\n    - "*"\ngrpc:\n  addr: 0.0.0.0:5557\nstorage:\n  type: memory\noauth2:\n  skipApprovalScreen: true\nenablePasswordDB: true\nstaticPasswords:\n  - email: "%s"\n    hash: "%s"\n    username: admin\n    userID: "7f3a1e2c-9b4d-4a6e-8c1f-2d5b7e9a0c34"\n' \
-            "$BASE_DOMAIN" "$GSC_DEX_ADMIN_EMAIL" "$GSC_DEX_ADMIN_HASH" | base64 -w0)
+          GSC_DEX_CFG=$(printf 'issuer: https://gsc.%s\nweb:\n  http: 0.0.0.0:5556\n  allowedOrigins:\n    - "*"\ngrpc:\n  addr: 0.0.0.0:5557\nstorage:\n  type: sqlite3\n  config:\n    file: /var/dex/dex.db\noauth2:\n  skipApprovalScreen: true\nexpiry:\n  idTokens: "8760h"\n  refreshTokens:\n    disableRotation: true\n    validIfNotUsedFor: "87600h"\n    absoluteLifetime: "87600h"\nenablePasswordDB: true\nstaticPasswords:\n  - email: "%s"\n    hash: "%s"\n    username: admin\n    userID: "7f3a1e2c-9b4d-4a6e-8c1f-2d5b7e9a0c34"\n' \
+            "$BASE_DOMAIN" "$MCP_DEX_ADMIN_EMAIL" "$MCP_DEX_ADMIN_HASH" | base64 -w0)
+
+          GA4_GATEWAY_CFG=$(printf 'host: https://ga4.%s/\nauthorization:\n  server: http://ga4-dex:5556/\n  authorizationProxyEnabled: true\n  serverMetadataProxyEnabled: true\n  dynamicClientRegistration:\n    enabled: true\n    publicClient: true\ndexGRPCClient:\n  addr: ga4-dex:5557\nproxy:\n  - path: /mcp\n    http:\n      url: http://ga4-mcp:8080/servers/%s/mcp/\n    authentication:\n      enabled: true\n' \
+            "$BASE_DOMAIN" "$GA4_MCP_PATH_TOKEN" | base64 -w0)
+
+          GA4_DEX_CFG=$(printf 'issuer: https://ga4.%s\nweb:\n  http: 0.0.0.0:5556\n  allowedOrigins:\n    - "*"\ngrpc:\n  addr: 0.0.0.0:5557\nstorage:\n  type: sqlite3\n  config:\n    file: /var/dex/dex.db\noauth2:\n  skipApprovalScreen: true\nexpiry:\n  idTokens: "8760h"\n  refreshTokens:\n    disableRotation: true\n    validIfNotUsedFor: "87600h"\n    absoluteLifetime: "87600h"\nenablePasswordDB: true\nstaticPasswords:\n  - email: "%s"\n    hash: "%s"\n    username: admin\n    userID: "7ea943f4-f0d5-4af2-a386-fc20eacb2ff1"\n' \
+            "$BASE_DOMAIN" "$MCP_DEX_ADMIN_EMAIL" "$MCP_DEX_ADMIN_HASH" | base64 -w0)
 
           N8N_APP_ENV=$(printf '%s\n' \
             "DB_TYPE=postgresdb" "DB_POSTGRESDB_HOST=db-n8n" "DB_POSTGRESDB_PORT=5432" \
@@ -439,6 +445,8 @@ jobs:
           GSC_GATEWAY_CFG='$GSC_GATEWAY_CFG'
           GSC_DEX_CFG='$GSC_DEX_CFG'
           GSC_MCP_PATH_TOKEN='$GSC_MCP_PATH_TOKEN'
+          GA4_GATEWAY_CFG='$GA4_GATEWAY_CFG'
+          GA4_DEX_CFG='$GA4_DEX_CFG'
 
           # App-managed stacks: infra rsyncs the compose file but the app's own
           # workflow writes .env.* and runs 'docker compose up'. Skip the up here.
@@ -459,10 +467,13 @@ jobs:
               tools)
                 echo \"\$GATEWAY_ENV\" | base64 -d > /root/stacks/tools/.env.gateway ;;
               ga4-mcp)
-                mkdir -p /root/stacks/ga4-mcp/credentials
+                mkdir -p /root/stacks/ga4-mcp/credentials /root/stacks/ga4-mcp/dex-data
                 echo \"\$GA4_SA_KEY\" | base64 -d > /root/stacks/ga4-mcp/credentials/sa-key.json
                 chmod 644 /root/stacks/ga4-mcp/credentials/sa-key.json
-                echo \"\$GA4_ENV\"    | base64 -d > /root/stacks/ga4-mcp/.env.ga4-mcp ;;
+                echo \"\$GA4_ENV\"    | base64 -d > /root/stacks/ga4-mcp/.env.ga4-mcp
+                echo \"\$GA4_GATEWAY_CFG\" | base64 -d > /root/stacks/ga4-mcp/gateway-config.yaml
+                echo \"\$GA4_DEX_CFG\"     | base64 -d > /root/stacks/ga4-mcp/dex-config.yaml
+                chown -R 1001:1001 /root/stacks/ga4-mcp/dex-data ;;
               gsc-mcp)
                 mkdir -p /root/stacks/gsc-mcp/credentials
                 echo \"\$GSC_SA_KEY\"      | base64 -d > /root/stacks/gsc-mcp/credentials/sa-key.json
@@ -470,7 +481,9 @@ jobs:
                 echo \"\$GSC_ENV\"         | base64 -d > /root/stacks/gsc-mcp/.env.gsc-mcp
                 echo \"GSC_MCP_PATH_TOKEN=\$GSC_MCP_PATH_TOKEN\" >> /root/stacks/gsc-mcp/.env
                 echo \"\$GSC_GATEWAY_CFG\" | base64 -d > /root/stacks/gsc-mcp/gateway-config.yaml
-                echo \"\$GSC_DEX_CFG\"     | base64 -d > /root/stacks/gsc-mcp/dex-config.yaml ;;
+                echo \"\$GSC_DEX_CFG\"     | base64 -d > /root/stacks/gsc-mcp/dex-config.yaml
+                mkdir -p /root/stacks/gsc-mcp/dex-data
+                chown -R 1001:1001 /root/stacks/gsc-mcp/dex-data ;;
             esac
             cd /root/stacks/\$stack
             docker compose up -d --remove-orphans
