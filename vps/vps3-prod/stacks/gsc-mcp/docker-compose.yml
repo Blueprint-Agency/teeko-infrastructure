@@ -62,6 +62,7 @@ services:
     command: ["serve", "/config.yaml"]
     volumes:
       - ./dex-config.yaml:/config.yaml:ro
+      - ./dex-data:/var/dex
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5556/.well-known/openid-configuration"]
       interval: 5s

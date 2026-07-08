@@ -1,7 +1,6 @@
-# TEMPLATE — the deploy workflow (deploy-infra.yml) overwrites this file on VPS3 with the
-# @@GSC_DEX_ADMIN_EMAIL@@ / @@GSC_DEX_ADMIN_HASH@@ markers replaced by real values.
-# Do not put a real bcrypt hash here. storage:memory is intentional (matches ga4); DCR
-# re-registers clients on connect. issuer MUST equal the public gateway host.
+# TEMPLATE — deploy-infra.yml overwrites this on VPS3 with @@markers@@ replaced.
+# storage is sqlite3 on the ./dex-data bind mount so signing keys + tokens survive
+# restarts (memory storage was causing forced re-logins). issuer MUST equal the public host.
 issuer: https://gsc.teeko.ai
 web:
   http: 0.0.0.0:5556
@@ -10,12 +9,20 @@ web:
 grpc:
   addr: 0.0.0.0:5557
 storage:
-  type: memory
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
 oauth2:
   skipApprovalScreen: true
+expiry:
+  idTokens: "8760h"
+  refreshTokens:
+    disableRotation: true
+    validIfNotUsedFor: "87600h"
+    absoluteLifetime: "87600h"
 enablePasswordDB: true
 staticPasswords:
-  - email: "@@GSC_DEX_ADMIN_EMAIL@@"
-    hash: "@@GSC_DEX_ADMIN_HASH@@"
+  - email: "@@MCP_DEX_ADMIN_EMAIL@@"
+    hash: "@@MCP_DEX_ADMIN_HASH@@"
     username: admin
     userID: "7f3a1e2c-9b4d-4a6e-8c1f-2d5b7e9a0c34"
