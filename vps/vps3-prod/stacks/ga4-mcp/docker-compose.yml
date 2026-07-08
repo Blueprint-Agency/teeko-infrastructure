@@ -1,55 +1,80 @@
-# Google Analytics MCP server (https://github.com/googleanalytics/google-analytics-mcp),
-# wrapped with mcp-proxy (https://github.com/sparfenyuk/mcp-proxy) since upstream only
-# speaks MCP-over-stdio and ships no HTTP transport or container image.
+# Google Analytics MCP (github.com/googleanalytics/google-analytics-mcp), wrapped with
+# mcp-proxy (stdio-only upstream), fronted by an OAuth 2.1 gateway (hyprmcp mcp-gateway) +
+# self-hosted Dex IdP so it can be a claude.ai web custom connector. Client URL:
+# https://ga4.<BASE_DOMAIN>/mcp
 #
-# Auth into GA4 is via a service account key mounted at ./credentials/sa-key.json
-# (GOOGLE_APPLICATION_CREDENTIALS + GOOGLE_PROJECT_ID come from .env.ga4-mcp).
+# Single public host ga4.<BASE_DOMAIN>:
+#   - Dex OAuth endpoints (Traefik priority 100) -> ga4-dex:5556
+#   - everything else incl. /mcp, /oauth/*, /.well-known/oauth-* (priority 1) -> ga4-gateway:9000
+# ga4-mcp has NO public route; the gateway reaches it in-network at
+# ga4-mcp:8080/servers/<token>/mcp/ and enforces OAuth Bearer.
 #
-# Access control: Claude.ai's custom-connector UI only takes a URL (+ optional OAuth
-# client id/secret) - no custom headers - so Traefik basic auth doesn't work there.
-# Instead the secret IS the path: --named-server mounts the server under
-# /servers/<name>/, and <name> is a random token (GA4_MCP_PATH_TOKEN) rather than a
-# friendly name. Claude.ai speaks streamable-HTTP (not legacy SSE), so the client URL
-# is the /mcp endpoint: https://ga4.<domain>/servers/<token>/mcp
-# The /status endpoint is blocked below because it echoes server names, which would
-# leak the token to anyone who requests it.
-#
-# --allow-origin=* enables mcp-proxy's CORS middleware, which emits
-# Access-Control-Expose-Headers: Mcp-Session-Id. Claude.ai's connector is a browser
-# client; without this it can't read the session id from the initialize response and
-# aborts mid-handshake. '*' is safe here because the secret path token - not CORS - is
-# the real access boundary, and no cookies/credentials are involved.
+# .env, .env.ga4-mcp, credentials/sa-key.json, dex-data/, and the rendered
+# gateway-config.yaml / dex-config.yaml are written at deploy time by deploy-infra.yml.
+# Committed gateway-config.yaml / dex-config.yaml carry @@PLACEHOLDER@@ markers.
 services:
+  # Backend: mcp-proxy wrapping the stdio analytics-mcp server. Internal only.
   ga4-mcp:
     image: blueprintagency/ga4-mcp:latest
     pull_policy: always
     container_name: ga4-mcp
     restart: unless-stopped
     env_file: .env.ga4-mcp
-    # --stateless: each HTTP request is self-contained (no server-side session to keep
-    # alive between requests). Remote browser clients like Claude.ai don't reliably
-    # thread the Mcp-Session-Id back, which made every POST spin up a new session and
-    # the handshake never completed. Stateless removes that requirement.
     command: ["--host=0.0.0.0", "--port=8080", "--pass-environment", "--stateless", "--allow-origin=*", "--named-server", "${GA4_MCP_PATH_TOKEN}", "analytics-mcp"]
     volumes:
       - ./credentials:/credentials:ro
+    networks:
+      - proxy
+
+  # OAuth 2.1 gateway (DCR + PKCE). Public catch-all on ga4.<domain>; reverse-proxies /mcp.
+  ga4-gateway:
+    image: ghcr.io/hyprmcp/mcp-gateway:0.4.0
+    pull_policy: always
+    container_name: ga4-gateway
+    restart: unless-stopped
+    command: ["serve", "--config", "/opt/config.yaml", "-v", "2"]
+    volumes:
+      - ./gateway-config.yaml:/opt/config.yaml:ro
+    depends_on:
+      ga4-dex:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.services.ga4-mcp.loadbalancer.server.port=8080"
-      # Catch-all: serves /servers/<token>/mcp (and everything else).
-      - "traefik.http.routers.ga4-mcp.rule=Host(`ga4.${BASE_DOMAIN}`)"
-      - "traefik.http.routers.ga4-mcp.entrypoints=websecure"
-      - "traefik.http.routers.ga4-mcp.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ga4-mcp.priority=1"
-      - "traefik.http.routers.ga4-mcp.service=ga4-mcp"
-      # Higher-priority router that blocks /status specifically (leaks server names).
-      - "traefik.http.routers.ga4-mcp-status.rule=Host(`ga4.${BASE_DOMAIN}`) && Path(`/status`)"
-      - "traefik.http.routers.ga4-mcp-status.entrypoints=websecure"
-      - "traefik.http.routers.ga4-mcp-status.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ga4-mcp-status.priority=10"
-      - "traefik.http.routers.ga4-mcp-status.service=ga4-mcp"
-      - "traefik.http.routers.ga4-mcp-status.middlewares=ga4-deny-all"
-      - "traefik.http.middlewares.ga4-deny-all.ipallowlist.sourcerange=127.0.0.1/32"
+      - "traefik.http.services.ga4-gateway.loadbalancer.server.port=9000"
+      - "traefik.http.routers.ga4gw.rule=Host(`ga4.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.ga4gw.entrypoints=websecure"
+      - "traefik.http.routers.ga4gw.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ga4gw.priority=1"
+      - "traefik.http.routers.ga4gw.service=ga4-gateway"
+    networks:
+      - proxy
+
+  # Self-hosted Dex IdP. Serves its OAuth endpoints on ga4.<domain> via the priority-100 router.
+  ga4-dex:
+    image: ghcr.io/hyprmcp/dex:2.44.0-alpine
+    pull_policy: always
+    container_name: ga4-dex
+    restart: unless-stopped
+    # Bypass upstream docker-entrypoint: its $-env-expansion mangles $ in the bcrypt hash.
+    entrypoint: ["dex"]
+    command: ["serve", "/config.yaml"]
+    volumes:
+      - ./dex-config.yaml:/config.yaml:ro
+      - ./dex-data:/var/dex
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5556/.well-known/openid-configuration"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.ga4-dex.loadbalancer.server.port=5556"
+      - "traefik.http.routers.ga4gw-dex.rule=Host(`ga4.${BASE_DOMAIN}`) && (PathPrefix(`/auth`) || PathPrefix(`/token`) || PathPrefix(`/keys`) || PathPrefix(`/approval`) || PathPrefix(`/callback`) || PathPrefix(`/device`) || PathPrefix(`/theme`) || PathPrefix(`/static`) || Path(`/.well-known/openid-configuration`))"
+      - "traefik.http.routers.ga4gw-dex.entrypoints=websecure"
+      - "traefik.http.routers.ga4gw-dex.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ga4gw-dex.priority=100"
+      - "traefik.http.routers.ga4gw-dex.service=ga4-dex"
     networks:
       - proxy
 

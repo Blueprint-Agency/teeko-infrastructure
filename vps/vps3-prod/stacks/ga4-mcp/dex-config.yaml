@@ -1,0 +1,27 @@
+# TEMPLATE — deploy-infra.yml overwrites this on VPS3 with @@markers@@ replaced.
+# sqlite3 on ./dex-data so tokens/signing keys survive restarts. issuer MUST equal public host.
+issuer: https://ga4.teeko.ai
+web:
+  http: 0.0.0.0:5556
+  allowedOrigins:
+    - "*"
+grpc:
+  addr: 0.0.0.0:5557
+storage:
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
+oauth2:
+  skipApprovalScreen: true
+expiry:
+  idTokens: "8760h"
+  refreshTokens:
+    disableRotation: true
+    validIfNotUsedFor: "87600h"
+    absoluteLifetime: "87600h"
+enablePasswordDB: true
+staticPasswords:
+  - email: "@@MCP_DEX_ADMIN_EMAIL@@"
+    hash: "@@MCP_DEX_ADMIN_HASH@@"
+    username: admin
+    userID: "7ea943f4-f0d5-4af2-a386-fc20eacb2ff1"
