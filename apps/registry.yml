@@ -96,6 +96,24 @@ apps:
     db: local-postgres
     notes: "Yoga Sadhana booking-system backend (Hono + Drizzle + Postgres). Built from booking-system/be, main branch. Uses dedicated booking-network."
 
+  - name: kaiteki-web
+    image: blueprintagency/kaiteki-web
+    tags:
+      staging: staging
+      production: ""           # TODO: cut over kaiteki.my from the legacy kaiteki-main-old stack
+    stack: kaiteki-staging
+    vps:
+      staging: bpvps1          # 4th VPS (187.127.122.41), alongside the legacy kaiteki stack
+      production: ""
+    port: 3000
+    domain:
+      staging: staging.kaiteki.my
+    db: null
+    notes: "Revamped Kaiteki site (Next.js 16, standalone). Built from Blueprint-Agency/kaiteki-web,
+      staging branch, by that repo's deploy-staging.yml (app-managed stack). staging.kaiteki.my is on
+      a separate Cloudflare account (proxied, Full) → Traefik default cert, no LE DNS-01. Replaces the
+      legacy blueprintagency/kaiteki-main-old at kaiteki.my once the prod cutover happens."
+
 n8n_instances:
   - name: n8n-dev
     image: n8nio/n8n:latest
