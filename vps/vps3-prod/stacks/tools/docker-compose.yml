@@ -25,7 +25,6 @@ services:
     networks:
       - proxy             # Traefik web UI (pg3.teeko.ai)
       - ehailing-network  # reach db-ehailing:5432
-      - booking-network   # reach db-booking:5432
 
 volumes:
   drizzle-gateway-data:
@@ -34,9 +33,8 @@ volumes:
 networks:
   proxy:
     external: true
-  # Owned by the ehailing / booking-system stacks; joined here so the gateway can
-  # reach their Postgres containers by service hostname.
+  # Owned by the ehailing stack; joined here so the gateway can reach its
+  # Postgres container by service hostname. booking-network is gone — the
+  # booking-system moved to bpvps2 on 2026-07-21, so pg3 no longer reaches it.
   ehailing-network:
-    external: true
-  booking-network:
     external: true

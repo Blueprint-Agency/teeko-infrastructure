@@ -54,17 +54,26 @@ apps:
   - name: booking-be
     image: blueprintagency/booking-be
     tags:
-      staging: ""              # no staging branch yet
+      staging: staging
       production: latest
-    stack: booking-system
+    stack: booking-staging / booking-prod
     vps:
-      staging: ""
-      production: vps3-prod
+      staging: bpvps2
+      production: bpvps2
     port: 4000
     domain:
-      production: bookingapi.teeko.ai
+      staging: bookingapi.teeko.ai
+      production: prodbookingapi.teeko.ai
     db: local-postgres
-    notes: "Yoga Sadhana booking-system backend (Hono + Drizzle + Postgres). Built from booking-system/be, main branch. Uses dedicated booking-network."
+    notes: "Yoga Sadhana booking-system backend (Hono + Drizzle + Postgres). Built from
+      booking-system/be by that repo's deploy-be.yml: staging branch -> booking-staging
+      stack, main branch -> booking-prod stack. BOTH instances live on bpvps2, sharing
+      only Traefik — separate containers, volumes, networks and databases keyed off
+      ENV_NAME in the shared compose file.
+      Migrated off vps3-prod on 2026-07-21; staging carries the original data, prod
+      started empty. NOTE: staging holds the bookingapi.teeko.ai name because it was
+      the only instance until the split — swap the two domains at real prod launch,
+      and repoint the Clerk/Stripe webhooks when you do."
 
   - name: kaiteki-web
     image: blueprintagency/kaiteki-web

@@ -1,0 +1,76 @@
+# Yoga Sadhana booking-system (Hono BE + Postgres).
+#
+# ONE file, deployed TWICE on bpvps2 — /root/stacks/booking-staging and
+# /root/stacks/booking-prod. Everything that would collide between the two
+# instances is keyed off ${ENV_NAME}, so the stacks share nothing but Traefik:
+#   containers  booking-be-<env> / booking-db-<env>
+#   volume      booking_<env>_pgdata
+#   network     booking-<env>-network
+#
+# The SERVICE name stays `db-booking` in both, so DATABASE_URL is identical
+# either side (`postgres://...@db-booking:5432/...`) — service DNS resolves
+# per-network, so there is no cross-talk.
+#
+# Set in each stack's .env:  ENV_NAME=staging|prod  BOOKING_HOST=<subdomain>
+services:
+  booking-be:
+    # staging branch -> :staging, main branch -> :latest. The deploy workflow
+    # writes IMAGE_TAG into this stack's .env, so the file always matches the
+    # image CI just pushed.
+    image: blueprintagency/booking-be:${IMAGE_TAG}
+    pull_policy: always
+    container_name: booking-be-${ENV_NAME}
+    restart: unless-stopped
+    env_file: .env.booking-be
+    healthcheck:
+      # Verifies the API serves AND can reach Postgres. Lets `compose up --wait`
+      # in the deploy workflow block until booking-be is truly healthy, and
+      # surfaces a crash-loop as "unhealthy" in `docker ps`. node:20-alpine ships
+      # a global fetch, so no curl/wget needed in the image.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      db-booking:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.booking-be-${ENV_NAME}.rule=Host(`${BOOKING_HOST}.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.booking-be-${ENV_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.booking-be-${ENV_NAME}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.booking-be-${ENV_NAME}.loadbalancer.server.port=4000"
+    networks:
+      - proxy
+      - booking-network
+
+  db-booking:
+    image: postgres:16-alpine
+    container_name: booking-db-${ENV_NAME}
+    restart: unless-stopped
+    env_file: .env.booking-db
+    environment:
+      TZ: Asia/Kuala_Lumpur
+      PGTZ: Asia/Kuala_Lumpur
+    volumes:
+      - booking_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - booking-network
+
+volumes:
+  booking_pgdata:
+    name: booking_${ENV_NAME}_pgdata
+
+networks:
+  proxy:
+    external: true
+  booking-network:
+    name: booking-${ENV_NAME}-network
+    driver: bridge

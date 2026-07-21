@@ -42,7 +42,9 @@ SSH key: `~/.ssh/infra_ed25519`. All hosts log in as **`deploy`**, not root — 
 
 **VPS2 — Production**: `traefik`, `website` (teeko.ai), `tools` (drizzle-gateway at pg.teeko.ai)
 
-**VPS3 — Production**: `traefik`, `n8n` (n8n.teeko.ai), `tools` (drizzle-gateway at pg3.teeko.ai), `ga4-mcp`, `gsc-mcp`, `booking-system`, `ehailing`
+**VPS3 — Production**: `traefik`, `n8n` (n8n.teeko.ai), `tools` (drizzle-gateway at pg3.teeko.ai), `ga4-mcp`, `gsc-mcp`, `ehailing`
+
+**BPVPS2 — Booking**: `traefik`, `booking-staging` (bookingapi.teeko.ai — carries the real data), `booking-prod` (prodbookingapi.teeko.ai — fresh). Both from one parameterized compose in `vps/bpvps2/stacks/booking/`, deployed to two dirs; `ENV_NAME` keys the container names, volume, network and Traefik router so they can't collide.
 
 > **Portainer and pgAdmin are gone** (removed 2026-07-21) — no container UI at all. Use `ssh bp-vps<n>-*` + `docker` directly. Postgres is managed via drizzle-gateway, now on all 3 Teeko VPS (`stagingpg` / `pg` / `pg3`.teeko.ai), all sharing the `GATEWAY_MASTERPASS` secret.
 
