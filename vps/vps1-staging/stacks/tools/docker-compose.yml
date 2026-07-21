@@ -1,42 +1,32 @@
+# Deployed to VPS1 over Tailscale via infra CI (.github/workflows/deploy-infra.yml).
 services:
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: pgadmin
-    restart: unless-stopped
-    env_file: .env.pgadmin
-    volumes:
-      - pgadmin-data:/var/lib/pgadmin
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.pgadmin.rule=Host(`stagingpg.${BASE_DOMAIN}`)"
-      - "traefik.http.routers.pgadmin.entrypoints=websecure"
-      - "traefik.http.routers.pgadmin.tls.certresolver=letsencrypt"
-      - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
-    networks:
-      - proxy
-
-  portainer:
-    image: portainer/portainer-ce:latest
+  # Drizzle Gateway — self-hosted Drizzle Studio for managing Postgres.
+  # Replaced pgAdmin. Login with MASTERPASS (from .env.gateway), then add DB
+  # connections in the UI using in-network hostnames (db-site / db-n8n).
+  drizzle-gateway:
+    image: ghcr.io/drizzle-team/gateway:latest
     pull_policy: always
-    container_name: portainer
+    container_name: drizzle-gateway
     restart: unless-stopped
+    env_file: .env.gateway          # provides MASTERPASS
+    environment:
+      PORT: "4983"
+      STORE_PATH: "/app"            # persisted connections/session live here
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - portainer_data:/data
+      - drizzle-gateway-data:/app
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.portainer.rule=Host(`port.${BASE_DOMAIN}`)"
-      - "traefik.http.routers.portainer.entrypoints=websecure"
-      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
-      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+      - "traefik.http.routers.gateway.rule=Host(`stagingpg.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.gateway.entrypoints=websecure"
+      - "traefik.http.routers.gateway.tls.certresolver=letsencrypt"
+      - "traefik.http.services.gateway.loadbalancer.server.port=4983"
+    # ponytail: single network — every VPS1 stack (incl. db-site, db-n8n) is
+    # already on `proxy`, so no extra network joins are needed.
     networks:
       - proxy
 
 volumes:
-  pgadmin-data:
-    external: true
-  portainer_data:
-    external: true
+  drizzle-gateway-data:
 
 networks:
   proxy:

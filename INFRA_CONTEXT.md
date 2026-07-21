@@ -50,9 +50,8 @@
 |-------|----------|-----------|
 | `traefik` | Traefik reverse proxy | — |
 | `website` | `site-fe` (port 5000), `backend-site` (port 3000), `db-site` (Postgres) | `staging.teeko.ai`, `stagingapi.teeko.ai` |
-| `webapp` | `webapp-fe` (port 5173), `webapp-be` (port 3000), `db-webapp` (Postgres) | staging only |
 | `n8n` | `n8n-dev` (port 5678), `db-n8n` (Postgres) | `stagingn8n.teeko.ai` |
-| `tools` | `pgadmin`, `portainer-ce` | `stagingpg.teeko.ai`, `port.teeko.ai` |
+| `tools` | `drizzle-gateway` (port 4983) | `stagingpg.teeko.ai` |
 
 ### VPS2 — Production
 
@@ -60,7 +59,7 @@
 |-------|----------|-----------|
 | `traefik` | Traefik reverse proxy | — |
 | `website` | `site-fe` (port 5000), `backend-site` (port 3000), `db-site` (Postgres) | `teeko.ai`, `www.teeko.ai`, `api.teeko.ai` |
-| `tools` | `pgadmin`, `portainer-agent` | `pg.teeko.ai` |
+| `tools` | `drizzle-gateway` (port 4983) | `pg.teeko.ai` |
 
 ### VPS3 — Production
 
@@ -68,9 +67,15 @@
 |-------|----------|-----------|
 | `traefik` | Traefik reverse proxy | — |
 | `n8n` | `n8n-prod` (port 5678), `db-n8n`, `db-waba` (Postgres) | `n8n.teeko.ai` |
-| `tools` | `portainer-agent` | — |
+| `tools` | `drizzle-gateway` (port 4983) | `pg3.teeko.ai` |
+| `ga4-mcp` | `ga4-mcp`, `ga4-gateway`, `ga4-dex` | `ga4.teeko.ai` |
+| `gsc-mcp` | `gsc-mcp`, `gsc-gateway`, `gsc-dex` | `gsc.teeko.ai` |
+| `booking-system` | `booking-be`, `booking-db` | `bookingapi.teeko.ai` |
+| `ehailing` | `ehailing-be`, `ehailing-db`, `ehailing-redis` | `ehailingapi.teeko.ai` |
 
-> **Portainer:** VPS1 runs Portainer CE UI, connected to portainer-agents on VPS2 and VPS3 (port 9001). Do not remove agent stacks.
+> **Portainer and pgAdmin removed 2026-07-21.** No container UI, no DB UI on staging. Postgres on prod is managed via drizzle-gateway; everything else via `ssh` + `docker`. Port 9001 can be closed on VPS2/VPS3.
+
+> **MCP stacks are 3-container units.** `*-mcp` (backend, no public route) + `*-gateway` (OAuth 2.1 front, serves `/mcp`) + `*-dex` (IdP, priority-100 router on the same host). All three are required per stack — none are redundant.
 
 ### BPVPS1 — Kaiteki (separate client, 4th VPS)
 
@@ -93,11 +98,9 @@
 |-----|-------|-------|---------|------------|
 | `teeko-site-fe` | `blueprintagency/teeko-website-fe` | `website` | `vps1-staging` → `staging.teeko.ai` | `vps2-prod` → `teeko.ai` |
 | `teeko-site-be` | `blueprintagency/teeko-website-be` | `website` | `vps1-staging` → `stagingapi.teeko.ai` | `vps2-prod` → `api.teeko.ai` |
-| `teeko-webapp-fe` | `chriskke/teeko-webapp-fe` | `webapp` | `vps1-staging` | not yet on prod |
-| `teeko-webapp-be` | `chriskke/teeko-webapp-be` | `webapp` | `vps1-staging` | not yet on prod |
 | `n8n-dev` | `n8nio/n8n:latest` | `n8n` | `vps1-staging` → `stagingn8n.teeko.ai` | — |
 | `n8n-prod` | `n8nio/n8n:latest` | `n8n` | — | `vps3-prod` → `n8n.teeko.ai` |
-| `pgadmin` | `dpage/pgadmin4:latest` | `tools` | `vps1-staging` → `stagingpg.teeko.ai` | `vps2-prod` → `pg.teeko.ai` |
+| `drizzle-gateway` | `ghcr.io/drizzle-team/gateway:latest` | `tools` | `vps1-staging` → `stagingpg.teeko.ai` | `vps2-prod` → `pg.teeko.ai`, `vps3-prod` → `pg3.teeko.ai` |
 
 **Image tags:**
 - `staging` branch → `:staging` tag
@@ -122,7 +125,6 @@ infrastructure/
 │   ├── vps1-staging/stacks/
 │   │   ├── traefik/docker-compose.yml
 │   │   ├── website/docker-compose.yml
-│   │   ├── webapp/docker-compose.yml
 │   │   ├── n8n/docker-compose.yml
 │   │   └── tools/docker-compose.yml
 │   ├── vps2-prod/stacks/
@@ -144,7 +146,7 @@ infrastructure/
 ```
 /root/stacks/<stack>/
   .env             ← base vars (BASE_DOMAIN, ACME_EMAIL, CF_DNS_API_TOKEN, TRAEFIK_DASHBOARD_AUTH)
-  .env.<service>   ← per-service vars (e.g. .env.site-be, .env.n8n-dev, .env.pgadmin)
+  .env.<service>   ← per-service vars (e.g. .env.site-be, .env.n8n-dev, .env.gateway)
 ```
 
 ---
@@ -164,7 +166,7 @@ infrastructure/
    - SSH in → write `.env` files from base64-encoded secrets → `docker compose up -d --remove-orphans` → `docker image prune -af`
 
 **Excluded from infra automation** (managed by their own app repo CI/CD):
-- VPS1: `website`, `webapp`
+- VPS1: `website`
 - VPS2: `website`
 - VPS3: nothing excluded
 
@@ -211,7 +213,7 @@ Each environment (`vps1-staging`, `vps2-prod`, `vps3-prod`) holds its own set.
 | `SSH_PRIVATE_KEY` | All VPS jobs | Ed25519 private key for `deploy@<vps>` |
 | `CF_DNS_API_TOKEN` | All VPS jobs | Cloudflare token for Traefik DNS challenge |
 | `TRAEFIK_DASHBOARD_AUTH` | All VPS jobs | htpasswd basic-auth string for Traefik dashboard |
-| `PGADMIN_DEFAULT_PASSWORD` | VPS1, VPS2 | pgAdmin admin password |
+| `GATEWAY_MASTERPASS` | VPS1, VPS2, VPS3 | drizzle-gateway master password (shared by all three) |
 | `N8N_DB_PASSWORD` | VPS1, VPS3 | n8n Postgres password |
 | `N8N_ENCRYPTION_KEY` | VPS1, VPS3 | n8n credential encryption key |
 
@@ -222,7 +224,6 @@ Each environment (`vps1-staging`, `vps2-prod`, `vps3-prod`) holds its own set.
 | `VPS1_HOST` / `VPS2_HOST` / `VPS3_HOST` | Respective job | VPS IP or hostname |
 | `BASE_DOMAIN` | All VPS jobs | e.g. `teeko.ai` |
 | `ACME_EMAIL` | All VPS jobs | Let's Encrypt registration email |
-| `PGADMIN_DEFAULT_EMAIL` | VPS1, VPS2 | pgAdmin login email |
 | `N8N_DB_USER` | VPS1, VPS3 | n8n Postgres username |
 | `N8N_DB_NAME` | VPS1, VPS3 | n8n Postgres database name |
 | `N8N_EDITOR_BASE_URL` | VPS1, VPS3 | n8n editor URL (e.g. `https://stagingn8n.teeko.ai`) |
@@ -300,10 +301,10 @@ Each stack directory on the VPS uses separate env files per service:
   .env.n8n-dev    ← DB_TYPE, DB_POSTGRESDB_*, N8N_ENCRYPTION_KEY, N8N_EDITOR_BASE_URL, WEBHOOK_URL, ...
   .env.db-n8n     ← POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
 
-# tools stack
+# tools stack (all 3 Teeko VPS)
 /root/stacks/tools/
   .env            ← base vars
-  .env.pgadmin    ← PGADMIN_DEFAULT_EMAIL, PGADMIN_DEFAULT_PASSWORD, PGADMIN_CONFIG_*
+  .env.gateway    ← MASTERPASS (drizzle-gateway)
 ```
 
 ---
@@ -361,7 +362,7 @@ Config lives in `.mcp.json` (gitignored). Template: `.mcp.json.example`.
 | VPS | Open Ports |
 |-----|-----------|
 | VPS1 (staging) | 22, 80, 443 |
-| VPS2 + VPS3 (prod) | 22, 80, 443, 9001 (portainer-agent) |
+| VPS2 + VPS3 (prod) | 22, 80, 443 (9001 no longer needed — portainer-agent removed) |
 | BPVPS1 (kaiteki) | 22, 80, 443 + mail: 25, 465, 587, 993, 995, 143, 110, 4190 |
 
 Everything else closed — ports 3000, 5432, 5678, 8080, 9090 are accessed via Traefik only.

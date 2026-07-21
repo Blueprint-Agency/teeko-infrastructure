@@ -28,9 +28,9 @@ Developer → push to staging/main → GitHub Actions (CI) → DockerHub
 
 | VPS | Stacks |
 |-----|--------|
-| VPS1 — Staging | `traefik`, `website` (staging.teeko.ai), `webapp` (staging), `n8n` (stagingn8n.teeko.ai), `tools` (pgadmin at stagingpg.teeko.ai, Portainer CE at port.teeko.ai) |
-| VPS2 — Prod | `traefik`, `website` (teeko.ai), `tools` (pgadmin at pg.teeko.ai, portainer-agent) |
-| VPS3 — Prod | `traefik`, `n8n` (n8n.teeko.ai), `tools` (portainer-agent) |
+| VPS1 — Staging | `traefik`, `website` (staging.teeko.ai), `n8n` (stagingn8n.teeko.ai), `tools` (drizzle-gateway at stagingpg.teeko.ai) |
+| VPS2 — Prod | `traefik`, `website` (teeko.ai), `tools` (drizzle-gateway at pg.teeko.ai) |
+| VPS3 — Prod | `traefik`, `n8n` (n8n.teeko.ai), `tools` (drizzle-gateway at pg3.teeko.ai), `ga4-mcp`, `gsc-mcp`, `booking-system`, `ehailing` |
 
 ## CI/CD Flow
 

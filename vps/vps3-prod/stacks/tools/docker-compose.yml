@@ -27,20 +27,6 @@ services:
       - ehailing-network  # reach db-ehailing:5432
       - booking-network   # reach db-booking:5432
 
-  portainer-agent:
-    image: portainer/agent:2.33.6
-    pull_policy: always
-    container_name: portainer_agent
-    restart: always
-    ports:
-      - "9001:9001"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /var/lib/docker/volumes:/var/lib/docker/volumes
-      - /:/host
-    networks:
-      - proxy
-
 volumes:
   drizzle-gateway-data:
     external: true

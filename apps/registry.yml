@@ -36,36 +36,6 @@ apps:
     db: local-postgres       # TODO: migrate to Supabase
     notes: "Teeko site backend (Node.js)"
 
-  - name: teeko-webapp-fe
-    image: chriskke/teeko-webapp-fe   # TODO: move to blueprintagency org
-    tags:
-      staging: staging
-      production: ""          # not yet on production
-    stack: webapp
-    vps:
-      staging: vps1-staging
-      production: ""          # TODO: assign VPS when ready
-    port: 5173
-    domain:
-      staging: ""             # TODO: fill in domain
-    db: null
-    notes: "Teeko webapp frontend (Next.js). Staging only."
-
-  - name: teeko-webapp-be
-    image: chriskke/teeko-webapp-be   # TODO: move to blueprintagency org
-    tags:
-      staging: staging
-      production: ""          # not yet on production
-    stack: webapp
-    vps:
-      staging: vps1-staging
-      production: ""          # TODO: assign VPS when ready
-    port: 3000
-    domain:
-      staging: ""             # TODO: fill in domain
-    db: local-postgres       # TODO: migrate to Supabase
-    notes: "Teeko webapp backend (Node.js). Staging only."
-
   - name: ehailing-be
     image: blueprintagency/ehailing-be
     tags:
@@ -184,19 +154,25 @@ mcp_servers:
       vps3-prod env: GSC_MCP_PATH_TOKEN, GSC_MCP_SA_KEY_JSON."
 
 tools:
-  - name: pgadmin
-    image: dpage/pgadmin4:latest
+  - name: drizzle-gateway
+    image: ghcr.io/drizzle-team/gateway:latest
     stack: tools
     vps:
-      - vps1-staging          # stagingpg.teeko.ai
-      - vps2-prod             # pg.teeko.ai
-    port: 80
+      - vps1-staging          # stagingpg.teeko.ai — reaches db-site / db-n8n
+      - vps2-prod             # pg.teeko.ai        — reaches db-site
+      - vps3-prod             # pg3.teeko.ai       — reaches db-ehailing / db-booking
+    port: 4983
     domain:
       staging: stagingpg.teeko.ai
       production: pg.teeko.ai
-    notes: "Database admin UI. Keep until Supabase migration is complete."
+      production_vps3: pg3.teeko.ai
+    notes: "Self-hosted Drizzle Studio. Replaced pgAdmin on all 3 Teeko VPS. Login with
+      MASTERPASS (GATEWAY_MASTERPASS secret, shared by all three), then add DB connections
+      in the UI by in-network hostname."
 
 # Already removed (migration complete):
+# - pgadmin (replaced by drizzle-gateway on all 3 Teeko VPS)
 # - portainer / portainer_agent (replaced by Claude Code + MCP)
+# - teeko-webapp-fe / -be / -db (staging webapp retired; volume teeko-webapp-db kept on VPS1)
 # - watchtower (replaced by GHA-triggered deploys)
 # - nginx-proxy-manager (replaced by Traefik on all 3 VPS)
