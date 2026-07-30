@@ -51,11 +51,18 @@ covers `teeko.ai`. Cert lands in `./certs/{fullchain,key}.pem`.
 |--------|------|-------|
 | A | `mail.kaiteki.my` / `webmail.kaiteki.my` | `187.127.122.41` (DNS-only) |
 | MX | `kaiteki.my` | `mail.kaiteki.my` (10) |
-| TXT (SPF) | `kaiteki.my` | `v=spf1 mx ~all` |
+| TXT (SPF) | `kaiteki.my` | `v=spf1 mx -all` |
 | TXT (DKIM) | `v1-rsa-20260628._domainkey` / `v1-ed25519-20260628._domainkey` | `v=DKIM1; …` |
-| TXT (DMARC) | `_dmarc.kaiteki.my` | `v=DMARC1; p=…; rua=mailto:…` |
+| TXT (DMARC) | `_dmarc.kaiteki.my` | `v=DMARC1; p=reject; rua=mailto:admin@kaiteki.my; fo=1` |
 
 PTR (Hostinger hPanel): `187.127.122.41` → **`mail.kaiteki.my`** (FCrDNS / deliverability).
+
+> **Anti-spoof: SPF `-all` + DMARC `p=reject` (hardfail) — do not loosen.** `mx` (this VPS)
+> is the *only* authorized sender, so hardfail is safe. Set 2026-07-30 after a forged
+> `support@kaiteki.my` phish (a non-existent address; SMTP lets anyone forge From) reached
+> `hr@`'s Inbox: the old `~all`/`p=quarantine` was a softfail so Stalwart accepted it as ham.
+> If you ever add a 3rd-party sender (CRM, marketing), add its `include:` to SPF **before** it
+> sends, or DMARC will reject it. Watch the `rua` reports at `admin@kaiteki.my` for spoof attempts.
 
 ## ⚠️ Gotchas / landmines
 - **`config.json` is persistence-critical** — the storage pointer Stalwart reads on boot
