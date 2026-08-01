@@ -1,10 +1,13 @@
-# Kaiteki.my legacy site (static HTML + light PHP, PHP 8.1/Apache, no DB).
-# Interim deployment while the Next.js rebuild (kaiteki-main) is in progress.
-# Compose synced by infra; image build/push + `docker compose up` are handled by
-# the kaiteki-main-old app workflow (app-managed stack, like booking-system/ehailing).
+# Kaiteki.my — PRODUCTION (Next.js revamp, standalone server on :3000).
+# Cut over 2026-08-01 from the legacy PHP site (blueprintagency/kaiteki-main-old);
+# that repo's deploy.yml was deleted so it can no longer publish here.
+# App-managed stack: image build/push + `docker compose up` are handled by the
+# kaiteki-web repo's deploy-prod.yml (push to `main`). This compose file is the
+# source of truth and is placed on BPVPS1 manually (BPVPS1 is not wired into
+# deploy-infra.yml), same as the `kaiteki-staging` stack alongside it.
 services:
   kaiteki:
-    image: blueprintagency/kaiteki-main-old:latest
+    image: blueprintagency/kaiteki-web:prod
     pull_policy: always
     container_name: kaiteki
     restart: unless-stopped
@@ -18,7 +21,7 @@ services:
       - "traefik.http.routers.kaiteki.rule=Host(`kaiteki.my`) || Host(`www.kaiteki.my`)"
       - "traefik.http.routers.kaiteki.entrypoints=websecure"
       - "traefik.http.routers.kaiteki.tls=true"
-      - "traefik.http.services.kaiteki.loadbalancer.server.port=80"
+      - "traefik.http.services.kaiteki.loadbalancer.server.port=3000"
     networks:
       - proxy
 
