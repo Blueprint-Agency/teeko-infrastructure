@@ -1,7 +1,7 @@
 #!/bin/bash
 # Renew the blueprintdigital.my LE cert (acme.sh / Cloudflare DNS-01) and reload only if it
-# actually renewed. Run daily via host cron:
-#   0 3 * * * /root/stacks/stalwart/renew-cert.sh >> /var/log/bpd-cert-renew.log 2>&1
+# actually renewed. Runs as the `deploy` user (no sudo on this host) via its own crontab:
+#   0 3 * * * /root/stacks/stalwart/renew-cert.sh >> /home/deploy/bpd-cert-renew.log 2>&1
 # The CF API token (BPD_CF_DNS_API_TOKEN) is read from the gitignored stack .env and
 # exported as CF_Token so acme.sh's dns_cf plugin can update the challenge records.
 set -e
@@ -16,7 +16,9 @@ if [ -f "$SRC" ] && [ "$SRC" -nt "$D/certs/fullchain.pem" ]; then
   docker run --rm -v "$D/acme:/acme.sh" -v "$D/certs:/certs" \
     neilpang/acme.sh --install-cert -d mail.blueprintdigital.my --ecc \
     --key-file /certs/key.pem --fullchain-file /certs/fullchain.pem
-  chown 2000:2000 "$D"/certs/fullchain.pem "$D"/certs/key.pem
+  # Stalwart runs as uid 2000 and must be able to read these. `deploy` has no sudo here,
+  # and chowning to another uid needs root — so do it from inside a container.
+  docker run --rm -v "$D/certs:/certs" alpine chown 2000:2000 /certs/fullchain.pem /certs/key.pem
   docker restart stalwart >/dev/null   # Traefik (file provider) auto-reloads on change
   echo "$(date -Is) cert RENEWED + Stalwart reloaded"
 else
