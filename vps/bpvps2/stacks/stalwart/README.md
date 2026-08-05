@@ -60,8 +60,20 @@ PTR (Hostinger hPanel): `187.127.207.82` → **`mail.blueprintdigital.my`** (FCr
 ## Firewall (Hostinger hPanel, BPVPS2)
 Existing 22/80/443 plus: **25, 465, 993, 995, 4190**.
 
+## First boot (already done 2026-08-06 — here for the next host)
+Because `config.json` is bind-mounted from the start, Stalwart's entrypoint skips its
+installer — which is also what normally creates the data dir. A fresh named volume is
+root-owned, but Stalwart runs as **uid 2000**, so it crashloops with
+`Failed to create database directory /opt/stalwart/data: PermissionDenied`. Fix once:
+```bash
+docker compose stop stalwart
+docker run --rm -v stalwart_stalwart-data:/d alpine chown 2000:2000 /d
+docker compose up -d stalwart
+```
+
 ## ⚠️ Gotchas / landmines
 Same set as bpvps1 — most importantly:
+- **A fresh `stalwart-data` volume must be `chown 2000:2000`** — see First boot above.
 - **`config.json` is persistence-critical** (bind-mounted storage pointer). Without it a
   container recreate wipes Stalwart back into the setup wizard.
 - **Most config lives in the store**, set via the admin UI; the v1.0 management REST API is
