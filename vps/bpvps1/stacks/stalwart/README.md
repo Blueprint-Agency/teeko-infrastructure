@@ -65,6 +65,14 @@ PTR (Hostinger hPanel): `187.127.122.41` → **`mail.kaiteki.my`** (FCrDNS / del
 > sends, or DMARC will reject it. Watch the `rua` reports at `admin@kaiteki.my` for spoof attempts.
 
 ## ⚠️ Gotchas / landmines
+- **Stalwart is version-pinned** (`v0.16.16`), not `:latest` — an unattended `up -d` must not
+  cross a major (1.0) with a data migration. Bump the tag deliberately; `0.16.x → 0.16.y` is a
+  plain binary swap per upstream. Back up the `stalwart-data` volume first (see Ops).
+- **Only 25/465/993/995/4190 actually serve.** The compose also publishes 587/143/110 but
+  Stalwart has **no listener** on them (implicit-TLS-only setup), so those three are dead
+  ports — a connection is accepted by docker-proxy and then dropped. Add the listener in the
+  admin UI *first* if a client ever needs STARTTLS submission. 4190 listens but is blocked at
+  the Hostinger firewall.
 - **`config.json` is persistence-critical** — the storage pointer Stalwart reads on boot
   (`/etc/stalwart/config.json`), bind-mounted from `./config.json`. Without it a container
   recreate wipes Stalwart back into the setup wizard (mail data survives, config lost).
@@ -86,4 +94,14 @@ cd /root/stacks/stalwart
 docker compose ps
 docker compose up -d            # safe to recreate (config.json is mounted)
 ./renew-cert.sh                 # manual cert renew (also daily via cron)
+
+# Version bump — back up the 7GB RocksDB store first (stop for a consistent copy):
+docker compose stop
+docker run --rm -v stalwart_stalwart-data:/d:ro -v /home/deploy/backups:/b \
+  alpine tar cf /b/stalwart-data-$(date +%Y%m%d).tar -C /d .
+# ...edit the image tag, then:
+docker compose pull && docker compose up -d
 ```
+> `deploy` has no passwordless sudo and `/root/stacks/stalwart` is root-owned — to update a
+> file there, pipe it through a container:
+> `cat file | ssh bp-bpvps1 "docker run --rm -i -v /root/stacks/stalwart:/s alpine sh -c 'cat > /s/file'"`

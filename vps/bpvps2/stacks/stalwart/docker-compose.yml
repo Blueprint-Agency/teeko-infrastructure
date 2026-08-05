@@ -1,20 +1,20 @@
-# Self-hosted email for kaiteki.my — Stalwart mail server + Bulwark (JMAP) webmail,
-# co-hosted on BPVPS1 behind the existing Traefik. (Bulwark replaced Roundcube; the
-# mail host was renamed email.kaiteki.my -> mail.kaiteki.my.)
+# Self-hosted email for blueprintdigital.my — Stalwart mail server + Bulwark (JMAP)
+# webmail, co-hosted on BPVPS2 behind the existing Traefik (alongside booking-system).
+# Mirrors the proven bpvps1/kaiteki.my stack — see ../../../bpvps1/stacks/stalwart/.
 #
-# Admin UI : https://mail.kaiteki.my     (Stalwart admin + JMAP endpoint)
-# Webmail  : https://webmail.kaiteki.my  (Bulwark)
+# Admin UI : https://mail.blueprintdigital.my     (Stalwart admin + JMAP endpoint)
+# Webmail  : https://webmail.blueprintdigital.my  (Bulwark)
 #
-# TLS: a single LE cert (mail.kaiteki.my + webmail.kaiteki.my) is issued out-of-band
-# via Cloudflare DNS-01 (acme.sh, KAITEKI_CF_DNS_API_TOKEN) into ./certs and is used by
-# BOTH Stalwart (mail ports, set in the admin UI -> Settings -> TLS, reading the files)
-# AND Traefik (web UIs, file provider). See README.md.
+# TLS: a single LE cert (mail + webmail.blueprintdigital.my) is issued out-of-band via
+# Cloudflare DNS-01 (acme.sh, BPD_CF_DNS_API_TOKEN) into ./certs and is used by BOTH
+# Stalwart (mail ports, set in the admin UI -> Settings -> TLS, reading the files) AND
+# Traefik (web UIs, file provider). Traefik's own CF token only covers teeko.ai. See README.md.
 #
 # Bulwark talks to Stalwart over JMAP (HTTPS). It reaches the server at
-# https://mail.kaiteki.my, which resolves INTERNALLY to Traefik (network alias on
+# https://mail.blueprintdigital.my, which resolves INTERNALLY to Traefik (network alias on
 # stalwart_mailnet, set in ../traefik/docker-compose.yml) so the LE cert verifies and
 # Traefik proxies to stalwart:8080. Stalwart's JMAP session advertises absolute
-# mail.kaiteki.my URLs, so its hostname MUST be set to mail.kaiteki.my in the admin UI.
+# mail.blueprintdigital.my URLs, so its hostname MUST be set to that in the admin UI.
 #
 # IMPORTANT: config.json (the storage pointer) is bind-mounted so a container recreate
 # does NOT wipe Stalwart back into bootstrap mode. Do not remove it.
@@ -29,12 +29,12 @@ services:
       # Fallback/recovery admin for the management API. Real value in stack .env (gitignored).
       - STALWART_RECOVERY_ADMIN=admin:${STALWART_RECOVERY_PASS}
     ports:
+      # Implicit-TLS ports only, matching how bpvps1 is actually configured. Stalwart has
+      # no listener on 587/143/110 there, so publishing them would just open dead ports.
+      # Add the listener in the admin UI FIRST if a client ever needs STARTTLS submission.
       - "25:25"       # SMTP (inbound)
       - "465:465"     # SMTPS (submission)
-      - "587:587"     # submission STARTTLS
-      - "143:143"     # IMAP STARTTLS
       - "993:993"     # IMAPS
-      - "110:110"     # POP3
       - "995:995"     # POP3S
       - "4190:4190"   # ManageSieve
       - "127.0.0.1:8090:8080"   # management API/UI (loopback only; Traefik serves it publicly)
@@ -46,7 +46,7 @@ services:
       - mailnet
 
   # Bulwark — modern JMAP webmail built for Stalwart (HTML compose, themes, calendar,
-  # contacts, built-in admin dashboard). Login with mailbox creds (e.g. admin@kaiteki.my).
+  # contacts, built-in admin dashboard). Login with mailbox creds.
   bulwark:
     image: ghcr.io/bulwarkmail/webmail:latest
     container_name: bulwark
@@ -54,9 +54,9 @@ services:
     environment:
       - HOSTNAME=0.0.0.0
       - PORT=3000
-      - JMAP_SERVER_URL=https://mail.kaiteki.my   # -> Traefik (mailnet alias) -> stalwart:8080
+      - JMAP_SERVER_URL=https://mail.blueprintdigital.my  # -> Traefik (mailnet alias) -> stalwart:8080
       - STALWART_FEATURES=true                    # password change, Sieve filters, etc.
-      - APP_NAME=Kaiteki Mail
+      - APP_NAME=Blueprint Mail
       - SETTINGS_SYNC_ENABLED=true                # server-side per-user settings (needs SESSION_SECRET)
       - SESSION_SECRET=${BULWARK_SESSION_SECRET}  # openssl rand -base64 32; real value in stack .env
       - ADMIN_PASSWORD=${BULWARK_ADMIN_PASSWORD}  # enables Bulwark's built-in admin dashboard (/admin)
