@@ -28,6 +28,11 @@ services:
     environment:
       # Fallback/recovery admin for the management API. Real value in stack .env (gitignored).
       - STALWART_RECOVERY_ADMIN=admin:${STALWART_RECOVERY_PASS}
+      # The base URL clients reach this server on. Stalwart's JMAP session advertises
+      # ABSOLUTE URLs built from this, and Bulwark follows them — so if it's wrong the
+      # webmail breaks. Set here rather than as a store-only admin-UI setting so it's
+      # version-controlled and survives a store rebuild.
+      - STALWART_PUBLIC_URL=https://mail.blueprintdigital.my
     ports:
       # Implicit-TLS ports only, matching how bpvps1 is actually configured. Stalwart has
       # no listener on 587/143/110 there, so publishing them would just open dead ports.
