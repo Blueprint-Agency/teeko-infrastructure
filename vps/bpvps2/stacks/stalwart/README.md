@@ -78,7 +78,20 @@ Same set as bpvps1 — most importantly:
   container recreate wipes Stalwart back into the setup wizard.
 - **Most config lives in the store**, set via the admin UI; the v1.0 management REST API is
   OAuth-only, so there's no easy scripting.
-- ⚠️ **fail2ban behind a reverse proxy** — see the XFF / Allowed-IPs settings above.
+- ⚠️ **fail2ban behind a reverse proxy — this host is NOT `172.16.0.0/16`.** The kaiteki
+  README says to allow `172.16.0.0/16`, which works there only because bpvps1's `mailnet`
+  happens to be `172.16.3.0/24`. **bpvps2's `mailnet` is `172.21.0.0/16`** (Traefik at
+  `172.21.0.4`), so that value would not match and the ban would stand. Use
+  **`172.16.0.0/12`** — it covers Docker's whole default pool on both hosts.
+  This bit us for real on 2026-08-06: within ~21h of `mail.blueprintdigital.my` going
+  public, bot URL-scanning tripped `scanBanRate` (30/day) and, with XFF trust still off,
+  every request looked like it came from Traefik → Traefik's IP banned → `mail.` served
+  **502 Bad Gateway** while `webmail.` stayed up. Symptom to recognise: Stalwart answers
+  fine on `127.0.0.1:8090` and from any other container, but **resets the connection from
+  Traefik specifically**. Bans are **persisted in the store — a restart does not clear
+  them**; remove via admin UI → Settings → Security → Blocked IPs.
+- The admin UI binds to **loopback only**. If Traefik is banned, reach it with an SSH
+  tunnel: `ssh -L 8090:127.0.0.1:8090 bp-bpvps2` → `http://localhost:8090`.
 - Port 25 outbound is **open** on this host (verified 2026-08-06).
 
 ## Ops

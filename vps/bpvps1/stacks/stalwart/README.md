@@ -86,6 +86,11 @@ PTR (Hostinger hPanel): `187.127.122.41` → **`mail.kaiteki.my`** (FCrDNS / del
   looks like it comes from Traefik's container IP, so a bot scan for an HTTP "banned path"
   (`*/wp-*`, `*.php*`, …) bans the proxy and **every mail web UI 502s**. The two settings above fix
   it: XFF trust makes bans use the real client IP, and the Allowed-IPs entry exempts the proxy.
+  > ⚠️ `172.16.0.0/16` is only correct **here**, because this host's `stalwart_mailnet` happens
+  > to be `172.16.3.0/24`. Don't copy that value to another host — bpvps2's mailnet is
+  > `172.21.0.0/16`, outside the /16. Prefer **`172.16.0.0/12`**, which covers Docker's whole
+  > default pool. Check with `docker network inspect stalwart_mailnet` before trusting it.
+  > Bans persist in the store — restarting Stalwart does **not** clear them.
 - Old DKIM verifiers (e.g. port25) can't evaluate Ed25519 → harmless `permerror`; RSA passes.
 
 ## Ops
