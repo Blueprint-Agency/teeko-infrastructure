@@ -88,8 +88,11 @@ Same set as bpvps1 — most importantly:
   every request looked like it came from Traefik → Traefik's IP banned → `mail.` served
   **502 Bad Gateway** while `webmail.` stayed up. Symptom to recognise: Stalwart answers
   fine on `127.0.0.1:8090` and from any other container, but **resets the connection from
-  Traefik specifically**. Bans are **persisted in the store — a restart does not clear
-  them**; remove via admin UI → Settings → Security → Blocked IPs.
+  Traefik specifically**. Bans are **persisted in the store**, so restarting Stalwart alone
+  does nothing. Remove the entry via admin UI → Settings → Security → Blocked IPs — and then
+  **restart Stalwart anyway**: the ban list is cached in memory, so deleting the entry has no
+  effect on live traffic until it reloads. Confirmed 2026-08-06: after the UI delete the 502
+  persisted unchanged, and only `docker compose restart stalwart` actually cleared it.
 - The admin UI binds to **loopback only**. If Traefik is banned, reach it with an SSH
   tunnel: `ssh -L 8090:127.0.0.1:8090 bp-bpvps2` → `http://localhost:8090`.
 - Port 25 outbound is **open** on this host (verified 2026-08-06).
