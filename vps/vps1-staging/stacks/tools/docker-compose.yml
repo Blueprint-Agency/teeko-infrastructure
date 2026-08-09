@@ -33,3 +33,4 @@ networks:
     external: true
 
 # ci: verify env-merge behaviour 2026-08-09T08:38:23Z
+# ci: retrigger after chown 2026-08-09T08:41:59Z
