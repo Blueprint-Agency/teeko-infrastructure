@@ -41,23 +41,20 @@ jobs:
             DIFF=$(git diff --name-only "$BEFORE" "$SHA")
           fi
           printf '%s\n' "$DIFF" > /tmp/diff.txt
-          HOSTS=$(python3 - <<'PY'
-import json
-hosts = json.load(open('vps/hosts.json'))
-changed = {l.strip() for l in open('/tmp/diff.txt') if l.strip()}
-sel = [h for h in hosts if any(c.startswith(h['dir'] + '/') for c in changed)]
-print(json.dumps(sel, separators=(',', ':')))
-PY
-)
+          HOSTS=$(python3 vps/shared/select-hosts.py /tmp/diff.txt)
           echo "hosts=$HOSTS" >> $GITHUB_OUTPUT
           echo "Selected: $HOSTS"
 
-  # ── VPS1 Staging ─────────────────────────────────────────────────────────────
-  deploy-vps1:
+  # ── One job, fanned out over the hosts detect selected ───────────────────────
+  deploy:
     needs: detect
-    if: needs.detect.outputs.vps1 == 'true'
-    environment: vps1-staging
+    if: needs.detect.outputs.hosts != '[]'
     runs-on: ubuntu-latest
+    environment: ${{ matrix.host.key }}
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.detect.outputs.hosts) }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -69,17 +66,20 @@ PY
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
-          ping: ${{ vars.VPS1_TAILSCALE_HOST }}
+          ping: ${{ vars.TAILSCALE_HOST }}
 
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ vars.VPS1_TAILSCALE_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H "${{ vars.TAILSCALE_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Detect stacks to deploy and remove
         id: stacks
+        env:
+          DIR: ${{ matrix.host.dir }}
+          EXCLUDE: ${{ matrix.host.exclude }}
         run: |
           BEFORE="${{ github.event.before }}"
           SHA="${{ github.sha }}"
@@ -88,283 +88,42 @@ PY
           else
             DIFF=$(git diff --name-only "$BEFORE" "$SHA")
           fi
-          EXCLUDE='website'
-          ALL_TOUCHED=$(echo "$DIFF" | grep '^vps/vps1-staging/stacks/' \
-            | sed 's|vps/vps1-staging/stacks/||;s|/.*||' | sort -u \
-            | grep -vxE "$EXCLUDE" || true)
+          EXPR=$(echo "$EXCLUDE" | tr ' ' '|')
+          [ -z "$EXPR" ] && EXPR='^$'
+          ALL_TOUCHED=$(echo "$DIFF" | grep "^$DIR/stacks/" \
+            | sed "s|$DIR/stacks/||;s|/.*||" | sort -u \
+            | grep -vxE "$EXPR" || true)
           DEPLOY="" REMOVE=""
           for stack in $ALL_TOUCHED; do
-            if [ -d "vps/vps1-staging/stacks/$stack" ]; then
-              DEPLOY="$DEPLOY $stack"
-            else
-              REMOVE="$REMOVE $stack"
-            fi
+            if [ -d "$DIR/stacks/$stack" ]; then DEPLOY="$DEPLOY $stack"; else REMOVE="$REMOVE $stack"; fi
           done
-          DEPLOY=$(echo $DEPLOY | xargs); REMOVE=$(echo $REMOVE | xargs)
-          echo "deploy=$DEPLOY" >> $GITHUB_OUTPUT
-          echo "remove=$REMOVE" >> $GITHUB_OUTPUT
+          echo "deploy=$(echo $DEPLOY | xargs)" >> $GITHUB_OUTPUT
+          echo "remove=$(echo $REMOVE | xargs)" >> $GITHUB_OUTPUT
           echo "Deploy: $DEPLOY | Remove: $REMOVE"
 
       - name: Sync compose files
         if: steps.stacks.outputs.deploy != ''
-        run: |
-          rsync -rltz \
-            --exclude='.env' --exclude='.env.*' \
-            -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no" \
-            vps/vps1-staging/stacks/ \
-            "deploy@${{ vars.VPS1_TAILSCALE_HOST }}:/root/stacks/"
-
-      - name: Deploy and remove stacks
-        if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
-          SSH_HOST: ${{ vars.VPS1_TAILSCALE_HOST }}
-          BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
-          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
-          CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
-          TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
-          GATEWAY_MASTERPASS: ${{ secrets.GATEWAY_MASTERPASS }}
-          N8N_DB_USER: ${{ vars.N8N_DB_USER }}
-          N8N_DB_PASSWORD: ${{ secrets.N8N_DB_PASSWORD }}
-          N8N_DB_NAME: ${{ vars.N8N_DB_NAME }}
-          N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
-          N8N_EDITOR_BASE_URL: ${{ vars.N8N_EDITOR_BASE_URL }}
-          N8N_WEBHOOK_URL: ${{ vars.N8N_WEBHOOK_URL }}
+          DIR: ${{ matrix.host.dir }}
+          SSH_HOST: ${{ vars.TAILSCALE_HOST }}
+          FANOUT: ${{ toJSON(matrix.host.fanout) }}
           DEPLOY: ${{ steps.stacks.outputs.deploy }}
-          REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
-          ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
-
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" | base64 -w0)
-
-          GATEWAY_ENV=$(printf 'MASTERPASS=%s\n' "$GATEWAY_MASTERPASS" | base64 -w0)
-
-          N8N_APP_ENV=$(printf '%s\n' \
-            "DB_TYPE=postgresdb" "DB_POSTGRESDB_HOST=db-n8n" "DB_POSTGRESDB_PORT=5432" \
-            "DB_POSTGRESDB_USER=$N8N_DB_USER" "DB_POSTGRESDB_PASSWORD=$N8N_DB_PASSWORD" \
-            "DB_POSTGRESDB_DATABASE=$N8N_DB_NAME" "DB_POSTGRESDB_SCHEMA=public" \
-            "N8N_ENCRYPTION_KEY=$N8N_ENCRYPTION_KEY" "N8N_PORT=5678" \
-            "N8N_EDITOR_BASE_URL=$N8N_EDITOR_BASE_URL" "WEBHOOK_URL=$N8N_WEBHOOK_URL" \
-            "N8N_SECURE_COOKIE=false" "N8N_RUNNERS_ENABLED=true" \
-            "N8N_DIAGNOSTICS_ENABLED=false" "N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true" \
-            "N8N_DEFAULT_BINARY_DATA_MODE=filesystem" "NODE_FUNCTION_ALLOW_BUILTIN=crypto" \
-            "GENERIC_TIMEZONE=Asia/Kuala_Lumpur" "TZ=Asia/Kuala_Lumpur" | base64 -w0)
-
-          N8N_DB_ENV=$(printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n' \
-            "$N8N_DB_USER" "$N8N_DB_PASSWORD" "$N8N_DB_NAME" | base64 -w0)
-
-          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no "deploy@$SSH_HOST" "
-          set -e
-          DEPLOY='$DEPLOY'
-          REMOVE='$REMOVE'
-          BASE_ENV='$BASE_ENV'
-          GATEWAY_ENV='$GATEWAY_ENV'
-          N8N_APP_ENV='$N8N_APP_ENV'
-          N8N_DB_ENV='$N8N_DB_ENV'
-
-          for stack in \$DEPLOY; do
-            echo '=== Deploying '\$stack' ==='
-            mkdir -p /root/stacks/\$stack
-            echo \"\$BASE_ENV\" | base64 -d > /root/stacks/\$stack/.env
-            case \$stack in
-              n8n)
-                echo \"\$N8N_APP_ENV\" | base64 -d > /root/stacks/n8n/.env.n8n-dev
-                echo \"\$N8N_DB_ENV\"  | base64 -d > /root/stacks/n8n/.env.db-n8n ;;
-              tools)
-                echo \"\$GATEWAY_ENV\" | base64 -d > /root/stacks/tools/.env.gateway ;;
-            esac
-            cd /root/stacks/\$stack
-            docker compose up -d --remove-orphans
-            docker image prune -af
-            echo '=== '\$stack' done ==='
+          RSH="ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no"
+          for stack in $DEPLOY; do
+            # FANOUT is 'null' for hosts without a fanout map; default is the stack's own name.
+            DESTS=$(STACK="$stack" python3 -c "import json,os;f=json.loads(os.environ.get('FANOUT') or 'null') or {};s=os.environ['STACK'];print(' '.join(f.get(s,[s])))")
+            for d in $DESTS; do
+              echo "=== syncing $stack -> /root/stacks/$d"
+              rsync -rltz --exclude='.env' --exclude='.env.*' -e "$RSH" \
+                "$DIR/stacks/$stack/" "deploy@$SSH_HOST:/root/stacks/$d/"
+            done
           done
-
-          for stack in \$REMOVE; do
-            echo '=== Removing '\$stack' ==='
-            if [ -d /root/stacks/\$stack ]; then
-              cd /root/stacks/\$stack && docker compose down --remove-orphans
-              rm -rf /root/stacks/\$stack
-            fi
-            echo '=== '\$stack' removed ==='
-          done
-          "
-
-  # ── VPS2 Production ───────────────────────────────────────────────────────────
-  deploy-vps2:
-    needs: detect
-    if: needs.detect.outputs.vps2 == 'true'
-    environment: vps2-prod
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-          ping: ${{ vars.VPS2_TAILSCALE_HOST }}
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ vars.VPS2_TAILSCALE_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
-
-      - name: Detect stacks to deploy and remove
-        id: stacks
-        run: |
-          BEFORE="${{ github.event.before }}"
-          SHA="${{ github.sha }}"
-          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            DIFF=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
-          else
-            DIFF=$(git diff --name-only "$BEFORE" "$SHA")
-          fi
-          EXCLUDE='website'
-          ALL_TOUCHED=$(echo "$DIFF" | grep '^vps/vps2-prod/stacks/' \
-            | sed 's|vps/vps2-prod/stacks/||;s|/.*||' | sort -u \
-            | grep -vxE "$EXCLUDE" || true)
-          DEPLOY="" REMOVE=""
-          for stack in $ALL_TOUCHED; do
-            if [ -d "vps/vps2-prod/stacks/$stack" ]; then
-              DEPLOY="$DEPLOY $stack"
-            else
-              REMOVE="$REMOVE $stack"
-            fi
-          done
-          DEPLOY=$(echo $DEPLOY | xargs); REMOVE=$(echo $REMOVE | xargs)
-          echo "deploy=$DEPLOY" >> $GITHUB_OUTPUT
-          echo "remove=$REMOVE" >> $GITHUB_OUTPUT
-          echo "Deploy: $DEPLOY | Remove: $REMOVE"
-
-      - name: Sync compose files
-        if: steps.stacks.outputs.deploy != ''
-        run: |
-          rsync -rltz \
-            --exclude='.env' --exclude='.env.*' \
-            -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no" \
-            vps/vps2-prod/stacks/ \
-            "deploy@${{ vars.VPS2_TAILSCALE_HOST }}:/root/stacks/"
 
       - name: Deploy and remove stacks
         if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
         env:
-          SSH_HOST: ${{ vars.VPS2_TAILSCALE_HOST }}
-          BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
-          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
-          CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
-          TRAEFIK_DASHBOARD_AUTH: ${{ secrets.TRAEFIK_DASHBOARD_AUTH }}
-          GATEWAY_MASTERPASS: ${{ secrets.GATEWAY_MASTERPASS }}
-          DEPLOY: ${{ steps.stacks.outputs.deploy }}
-          REMOVE: ${{ steps.stacks.outputs.remove }}
-        run: |
-          ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
-
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" | base64 -w0)
-
-          GATEWAY_ENV=$(printf 'MASTERPASS=%s\n' "$GATEWAY_MASTERPASS" | base64 -w0)
-
-          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no "deploy@$SSH_HOST" "
-          set -e
-          DEPLOY='$DEPLOY'
-          REMOVE='$REMOVE'
-          BASE_ENV='$BASE_ENV'
-          GATEWAY_ENV='$GATEWAY_ENV'
-
-          for stack in \$DEPLOY; do
-            echo '=== Deploying '\$stack' ==='
-            mkdir -p /root/stacks/\$stack
-            echo \"\$BASE_ENV\" | base64 -d > /root/stacks/\$stack/.env
-            case \$stack in
-              tools)
-                echo \"\$GATEWAY_ENV\" | base64 -d > /root/stacks/tools/.env.gateway ;;
-            esac
-            cd /root/stacks/\$stack
-            docker compose up -d --remove-orphans
-            docker image prune -af
-            echo '=== '\$stack' done ==='
-          done
-
-          for stack in \$REMOVE; do
-            echo '=== Removing '\$stack' ==='
-            if [ -d /root/stacks/\$stack ]; then
-              cd /root/stacks/\$stack && docker compose down --remove-orphans
-              rm -rf /root/stacks/\$stack
-            fi
-            echo '=== '\$stack' removed ==='
-          done
-          "
-
-  # ── VPS3 Production ───────────────────────────────────────────────────────────
-  deploy-vps3:
-    needs: detect
-    if: needs.detect.outputs.vps3 == 'true'
-    environment: vps3-prod
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-          ping: ${{ vars.VPS3_TAILSCALE_HOST }}
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "${{ vars.VPS3_TAILSCALE_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
-
-      - name: Detect stacks to deploy and remove
-        id: stacks
-        run: |
-          BEFORE="${{ github.event.before }}"
-          SHA="${{ github.sha }}"
-          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            DIFF=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
-          else
-            DIFF=$(git diff --name-only "$BEFORE" "$SHA")
-          fi
-          ALL_TOUCHED=$(echo "$DIFF" | grep '^vps/vps3-prod/stacks/' \
-            | sed 's|vps/vps3-prod/stacks/||;s|/.*||' | sort -u || true)
-          DEPLOY="" REMOVE=""
-          for stack in $ALL_TOUCHED; do
-            if [ -d "vps/vps3-prod/stacks/$stack" ]; then
-              DEPLOY="$DEPLOY $stack"
-            else
-              REMOVE="$REMOVE $stack"
-            fi
-          done
-          DEPLOY=$(echo $DEPLOY | xargs); REMOVE=$(echo $REMOVE | xargs)
-          echo "deploy=$DEPLOY" >> $GITHUB_OUTPUT
-          echo "remove=$REMOVE" >> $GITHUB_OUTPUT
-          echo "Deploy: $DEPLOY | Remove: $REMOVE"
-
-      - name: Sync compose files
-        if: steps.stacks.outputs.deploy != ''
-        run: |
-          rsync -rltz \
-            --exclude='.env' --exclude='.env.*' \
-            -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no" \
-            vps/vps3-prod/stacks/ \
-            "deploy@${{ vars.VPS3_TAILSCALE_HOST }}:/root/stacks/"
-
-      - name: Deploy and remove stacks
-        if: steps.stacks.outputs.deploy != '' || steps.stacks.outputs.remove != ''
-        env:
-          SSH_HOST: ${{ vars.VPS3_TAILSCALE_HOST }}
+          SSH_HOST: ${{ vars.TAILSCALE_HOST }}
           BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
@@ -453,7 +212,7 @@ PY
 
           # App-managed stacks: infra rsyncs the compose file but the app's own
           # workflow writes .env.* and runs 'docker compose up'. Skip the up here.
-          APP_STACKS='booking-system ehailing'
+          APP_STACKS='${{ matrix.host.app_stacks }}'
 
           for stack in \$DEPLOY; do
             echo '=== Deploying '\$stack' ==='
@@ -465,7 +224,7 @@ PY
             fi
             case \$stack in
               n8n)
-                echo \"\$N8N_APP_ENV\" | base64 -d > /root/stacks/n8n/.env.n8n-prod
+                echo \"\$N8N_APP_ENV\" | base64 -d > /root/stacks/n8n/.env.n8n
                 echo \"\$N8N_DB_ENV\"  | base64 -d > /root/stacks/n8n/.env.db-n8n ;;
               tools)
                 echo \"\$GATEWAY_ENV\" | base64 -d > /root/stacks/tools/.env.gateway ;;
