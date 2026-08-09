@@ -141,6 +141,9 @@ jobs:
           N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
           N8N_EDITOR_BASE_URL: ${{ vars.N8N_EDITOR_BASE_URL }}
           N8N_WEBHOOK_URL: ${{ vars.N8N_WEBHOOK_URL }}
+          WABA_DB_USER: ${{ vars.WABA_DB_USER }}
+          WABA_DB_PASSWORD: ${{ secrets.WABA_DB_PASSWORD }}
+          WABA_DB_NAME: ${{ vars.WABA_DB_NAME }}
         run: |
           RSH="ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no"
 
