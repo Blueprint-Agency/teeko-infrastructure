@@ -121,7 +121,17 @@ SSH key: `~/.ssh/infra_ed25519`. All hosts log in as **`deploy`**, not root — 
 ## Architecture
 
 - 5 Hostinger VPS across two accounts, Docker Compose, no Kubernetes
-- Reverse proxy: Traefik on all VPS (Let's Encrypt via Cloudflare DNS), ports 80→443
+- Reverse proxy: Traefik on all VPS (Let's Encrypt via Cloudflare DNS-01), ports 80→443
+
+> ⚠️ **A Cloudflare token cannot span accounts, and Traefik reads `CF_DNS_API_TOKEN`
+> process-wide.** bpvps2's token is a **Teeko** token (teeko.ai only), so DNS-01 there cannot
+> issue for `reservetoday.app` / `kaiteki.my` / `blueprintdigital.my` — it fails with
+> `cloudflare: failed to find zone …: zone could not be found`. Adding a second DNS-01 resolver
+> does **not** help: both resolvers would read the same env var. bpvps2 therefore carries a
+> second resolver, **`le-tls`** (TLS-ALPN-01 on :443, no credentials), used by the booking
+> stacks. It requires the record to be **DNS-only** — a Cloudflare-proxied (orange) host
+> terminates TLS at the edge and the challenge never lands — and it cannot issue wildcards.
+> Keep `letsencrypt` (DNS-01) for teeko.ai and for any wildcard.
 - Container registry: DockerHub — `blueprintagency/<app>:<tag>`
 - Databases: local PostgreSQL per app (migrating to Supabase); n8n keeps local Postgres
 - External: Supabase, Auth0, Stripe
