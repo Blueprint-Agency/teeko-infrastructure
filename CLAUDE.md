@@ -294,7 +294,21 @@ docker compose logs -f <service>
 For bpvps1/bpvps2: both share **one** firewall group, `319466` ("default") — editing it hits *both*
 hosts. Rules are per-group and must be re-synced onto each VPS after editing; check `is_synced`,
 because an edited-but-unsynced group silently keeps the old rules.
-Current 319466 rules: **22, 25, 80, 443, 465, 587, 993, 995** all `accept TCP` from any.
+Current 319466 rules: **25, 80, 443, 465, 587, 993, 995** `accept TCP` from any, plus **22**
+`accept TCP` from **`100.64.0.0/10` only** (the Tailscale CGNAT range) as of 2026-08-09.
+
+> ⚠️ **As of 2026-08-09 group 319466 is edited but `is_synced: false`.** The port-22 restriction is
+> staged and **not in effect** — both hosts still accept SSH from anywhere until each VM is synced.
+> Sync in hPanel (or `VPS_syncFirewallV1` for VM `1778283` = bpvps1 and `1831058` = bpvps2).
+> Rule 22 was **restricted rather than deleted** deliberately: it is reversible, self-documenting,
+> and the tailnet source keeps a path in that does not depend on deleting/recreating a rule.
+
+> ⚠️ **bpvps1 and bpvps2 are user-owned Tailscale nodes, not tagged, so their keys EXPIRE** —
+> bpvps1 `2026-12-23`, bpvps2 `2027-01-17`. When a key expires the node leaves the tailnet; with 22
+> restricted to the tailnet that means no SSH at all, recoverable only via Hostinger's browser
+> console. Fix once in the Tailscale admin console: **Machines → ⋯ → Disable key expiry** on both.
+> (VPS1/2/3 are `tag:ci` tagged devices and do not expire.) There is no Tailscale API token in
+> `.env`, so this cannot be scripted.
 
 **VPS1 (staging):** Open **22**, **80**, **443**
 
