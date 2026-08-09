@@ -213,10 +213,20 @@ step's `env:` block, add it to the host's GitHub Environment. Never add a branch
 > restored to `72.61.114.7`. **Verify by reading `.github/workflows/` from each repo's contents
 > API**, never by code search.
 
-> **`teeko-website` does not use Tailscale.** `be-deploy.yml` and `fe-deploy.yml` SSH straight to
-> `VPS1_HOST` / `VPS2_HOST` public IPs. Closing port 22 on VPS1/VPS2 breaks teeko.ai and
-> staging.teeko.ai deploys — migrate those two workflows to `VPS{1,2}_TAILSCALE_HOST` (+ the
-> `tailscale/github-action` step, as `teeko-ehailing` and `kaiteki-web` already do) **first**.
+> **All five deploy paths now reach the VPS over Tailscale.** `teeko-website` was the last holdout
+> — `be-deploy.yml`/`fe-deploy.yml` SSH'd to `VPS1_HOST`/`VPS2_HOST` public IPs, which is why port 22
+> had to stay open. Migrated to `VPS{1,2}_TAILSCALE_HOST` + `tailscale/github-action` on 2026-08-09
+> (both `main` and `staging` branches) and verified by dispatching both workflows against VPS1.
+> `VPS1_HOST`/`VPS2_HOST` are now unreferenced but **kept until a production (`main`) deploy has
+> actually run over the tailnet** — only the staging path is proven so far.
+
+> **Seven secrets referenced by app workflows do not exist anywhere** (checked repo-level, and every
+> environment, as both secret and variable). These predate the 2026-08-09 CI work and are unrelated
+> to it, but each one is silently written as an empty value into the app's `.env`:
+> `booking-system` → `R2_ACCESS_KEY_ID`, `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`,
+> `R2_SECRET_ACCESS_KEY` (object storage — uploads);
+> `teeko-ehailing` → `CLERK_DRIVER_WEBHOOK_SIGNING_SECRET`, `CLERK_RIDER_WEBHOOK_SIGNING_SECRET`
+> (webhook signature verification).
 
 **App repo deploys are compatible with the `.env` merge** — no changes needed there.
 `booking-system` rewrites its keys idempotently (`sed -i "/^${k}=/d"` then append), which is the
