@@ -11,7 +11,10 @@
 # either side (`postgres://...@db-booking:5432/...`) — service DNS resolves
 # per-network, so there is no cross-talk.
 #
-# Set in each stack's .env:  ENV_NAME=staging|prod  BOOKING_HOST=<subdomain>
+# Set in each stack's .env:  ENV_NAME=staging|prod  BOOKING_FQDN=<full hostname>
+#
+# BOOKING_FQDN is a FULL hostname, not a subdomain of the host-wide BASE_DOMAIN
+# (teeko.ai) — booking lives on reservetoday.app, which BASE_DOMAIN can't express.
 services:
   booking-be:
     # staging branch -> :staging, main branch -> :latest. The deploy workflow
@@ -38,7 +41,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.booking-be-${ENV_NAME}.rule=Host(`${BOOKING_HOST}.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.booking-be-${ENV_NAME}.rule=Host(`${BOOKING_FQDN}`)"
       - "traefik.http.routers.booking-be-${ENV_NAME}.entrypoints=websecure"
       - "traefik.http.routers.booking-be-${ENV_NAME}.tls.certresolver=letsencrypt"
       - "traefik.http.services.booking-be-${ENV_NAME}.loadbalancer.server.port=4000"
