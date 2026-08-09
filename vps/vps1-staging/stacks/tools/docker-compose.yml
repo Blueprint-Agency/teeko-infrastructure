@@ -31,3 +31,5 @@ volumes:
 networks:
   proxy:
     external: true
+
+# ci: verify env-merge behaviour 2026-08-09T08:38:23Z
