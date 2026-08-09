@@ -199,26 +199,37 @@ step's `env:` block, add it to the host's GitHub Environment. Never add a branch
 `deploy-infra.yml` reads only `vars.TAILSCALE_HOST` (per-Environment). Every `VPS*_HOST` /
 `*_TAILSCALE_HOST` org variable exists for a **different repo's** deploy workflow:
 
+The org holds exactly **8** variables. Five (`VPS{1,2,3}_HOST`, `BPVPS1`, `BPVPS2` — the public IPs)
+were deleted on 2026-08-09 once every deploy path had moved to the tailnet.
+
 | Org variable | Consumed by |
 |---|---|
-| `VPS1_HOST`, `VPS2_HOST` | `teeko-website` → `be-deploy.yml`, `fe-deploy.yml` |
-| `VPS3_HOST`, `VPS3_TAILSCALE_HOST` | `teeko-ehailing` → `deploy-backend.yml` |
-| `BPVPS1`, `BPVPS1_TAILSCALE_HOST` | `kaiteki-web` → `deploy-prod.yml`, `deploy-staging.yml` |
+| `VPS1_TAILSCALE_HOST`, `VPS2_TAILSCALE_HOST` | `teeko-website` → `be-deploy.yml`, `fe-deploy.yml` |
+| `VPS3_TAILSCALE_HOST` | `teeko-ehailing` → `deploy-backend.yml` |
+| `BPVPS1_TAILSCALE_HOST` | `kaiteki-web` → `deploy-prod.yml`, `deploy-staging.yml` |
 | `BPVPS2_TAILSCALE_HOST` | `booking-system` → `deploy-be.yml` |
-| `VPS1_TAILSCALE_HOST`, `VPS2_TAILSCALE_HOST`, `BPVPS2` | nothing today — keep; they are what teeko-website needs when it migrates off public IPs |
+| `ACME_EMAIL`, `BASE_DOMAIN`, `DOCKERHUB_USERNAME` | infra + every app build |
 
 > **The GitHub code-search API does not index these workflow files.** A `/search/code?q=VPS1_HOST`
 > returns `total_count: 0` for names that are demonstrably in use. On 2026-08-09 that false
-> negative got `VPS1_HOST` deleted, which would have broken both teeko-website deploys; it was
-> restored to `72.61.114.7`. **Verify by reading `.github/workflows/` from each repo's contents
-> API**, never by code search.
+> negative got `VPS1_HOST` deleted while `teeko-website` still needed it; it was restored within
+> the hour, and deleted again only after that repo moved to Tailscale. **Verify by reading
+> `.github/workflows/` from each repo's contents API**, never by code search.
 
-> **All five deploy paths now reach the VPS over Tailscale.** `teeko-website` was the last holdout
-> — `be-deploy.yml`/`fe-deploy.yml` SSH'd to `VPS1_HOST`/`VPS2_HOST` public IPs, which is why port 22
-> had to stay open. Migrated to `VPS{1,2}_TAILSCALE_HOST` + `tailscale/github-action` on 2026-08-09
-> (both `main` and `staging` branches) and verified by dispatching both workflows against VPS1.
-> `VPS1_HOST`/`VPS2_HOST` are now unreferenced but **kept until a production (`main`) deploy has
-> actually run over the tailnet** — only the staging path is proven so far.
+> **Strip comments before deciding a variable is unused.** `teeko-ehailing` carries the line
+> `# SSH in over Tailscale (was the public vars.VPS3_HOST before Tailscale)`. A naive
+> `vars\.([A-Z_]+)` match reads that as a live reference and keeps a dead variable alive forever.
+> The comment is accurate history — leave it; just don't count it.
+
+> **All five deploy paths reach the VPS over Tailscale, verified end to end on 2026-08-09** by
+> dispatching every workflow and confirming success: `teeko-website` BE+FE on **both** `staging`
+> (VPS1) and `main` (VPS2, teeko.ai — containers restarted, site 200), `kaiteki-web` staging+prod,
+> `booking-system` on `main`, `teeko-ehailing` on `staging`. Only after that were the public-IP
+> variables removed.
+
+> `booking-system`'s deploy runs `db:migrate && db:seed`. **`booking-staging` carries the real
+> data** (`bookingapi.teeko.ai`), `booking-prod` is fresh — so exercise the deploy on `main`, not
+> `staging`. Verified 2026-08-09: prod redeployed, staging's 3 bookings untouched.
 
 > **Seven secrets referenced by app workflows do not exist anywhere** (checked repo-level, and every
 > environment, as both secret and variable). These predate the 2026-08-09 CI work and are unrelated
