@@ -142,13 +142,14 @@ jobs:
           N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
           N8N_EDITOR_BASE_URL: ${{ vars.N8N_EDITOR_BASE_URL }}
           N8N_WEBHOOK_URL: ${{ vars.N8N_WEBHOOK_URL }}
+          ENV_NAME: ${{ matrix.host.env_name }}
           DEPLOY: ${{ steps.stacks.outputs.deploy }}
           REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
           ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
 
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGA4_MCP_PATH_TOKEN=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GA4_MCP_PATH_TOKEN" | base64 -w0)
+          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGA4_MCP_PATH_TOKEN=%s\nENV_NAME=%s\n' \
+            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GA4_MCP_PATH_TOKEN" "$ENV_NAME" | base64 -w0)
 
           # GOOGLE_APPLICATION_CREDENTIALS path matches where the sa-key.json is written below
           GA4_ENV=$(printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\nGOOGLE_PROJECT_ID=%s\n' \
