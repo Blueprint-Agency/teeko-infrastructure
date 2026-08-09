@@ -1,7 +1,7 @@
 [
   { "key": "vps1-staging", "dir": "vps/vps1-staging", "env_name": "dev",  "exclude": "website", "app_stacks": "" },
   { "key": "vps2-prod",    "dir": "vps/vps2-prod",    "env_name": "prod", "exclude": "website", "app_stacks": "" },
-  { "key": "vps3-prod",    "dir": "vps/vps3-prod",    "env_name": "prod", "exclude": "",        "app_stacks": "booking-system ehailing" },
+  { "key": "vps3-prod",    "dir": "vps/vps3-prod",    "env_name": "prod", "exclude": "",        "app_stacks": "ehailing" },
 
   { "key": "bpvps1", "dir": "vps/bpvps1", "env_name": "prod",
     "_comment": "stalwart/traefik/wordpress are root:root on the host; CI connects as deploy and cannot write them. Excluded until they are chowned to deploy.",

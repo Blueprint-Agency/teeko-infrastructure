@@ -194,6 +194,35 @@ step's `env:` block, add it to the host's GitHub Environment. Never add a branch
 > booking-**staging** resolve to booking-prod's container, volume and network — on the instance that
 > holds the real data.
 
+### ⚠️ Org-level vars are consumed by OTHER repos — check before deleting one
+
+`deploy-infra.yml` reads only `vars.TAILSCALE_HOST` (per-Environment). Every `VPS*_HOST` /
+`*_TAILSCALE_HOST` org variable exists for a **different repo's** deploy workflow:
+
+| Org variable | Consumed by |
+|---|---|
+| `VPS1_HOST`, `VPS2_HOST` | `teeko-website` → `be-deploy.yml`, `fe-deploy.yml` |
+| `VPS3_HOST`, `VPS3_TAILSCALE_HOST` | `teeko-ehailing` → `deploy-backend.yml` |
+| `BPVPS1`, `BPVPS1_TAILSCALE_HOST` | `kaiteki-web` → `deploy-prod.yml`, `deploy-staging.yml` |
+| `BPVPS2_TAILSCALE_HOST` | `booking-system` → `deploy-be.yml` |
+| `VPS1_TAILSCALE_HOST`, `VPS2_TAILSCALE_HOST`, `BPVPS2` | nothing today — keep; they are what teeko-website needs when it migrates off public IPs |
+
+> **The GitHub code-search API does not index these workflow files.** A `/search/code?q=VPS1_HOST`
+> returns `total_count: 0` for names that are demonstrably in use. On 2026-08-09 that false
+> negative got `VPS1_HOST` deleted, which would have broken both teeko-website deploys; it was
+> restored to `72.61.114.7`. **Verify by reading `.github/workflows/` from each repo's contents
+> API**, never by code search.
+
+> **`teeko-website` does not use Tailscale.** `be-deploy.yml` and `fe-deploy.yml` SSH straight to
+> `VPS1_HOST` / `VPS2_HOST` public IPs. Closing port 22 on VPS1/VPS2 breaks teeko.ai and
+> staging.teeko.ai deploys — migrate those two workflows to `VPS{1,2}_TAILSCALE_HOST` (+ the
+> `tailscale/github-action` step, as `teeko-ehailing` and `kaiteki-web` already do) **first**.
+
+**App repo deploys are compatible with the `.env` merge** — no changes needed there.
+`booking-system` rewrites its keys idempotently (`sed -i "/^${k}=/d"` then append), which is the
+same key-level merge CI does, so neither clobbers the other. `ehailing` and `kaiteki-web` write
+only their own `.env.*` files, which CI's rsync excludes.
+
 **Currently excluded from CI, and why:**
 
 | Host | Excluded | Reason |
