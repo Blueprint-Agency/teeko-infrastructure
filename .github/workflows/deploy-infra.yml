@@ -145,8 +145,10 @@ jobs:
         run: |
           ESCAPED_AUTH=$(printf '%s' "$TRAEFIK_DASHBOARD_AUTH" | sed 's/\$/\$\$/g')
 
-          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGA4_MCP_PATH_TOKEN=%s\nENV_NAME=%s\n' \
-            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GA4_MCP_PATH_TOKEN" "$ENV_NAME" | base64 -w0)
+          # ENV_NAME is deliberately NOT here: it is appended per target, because a
+          # fanout stack's destinations each carry their own env_name.
+          BASE_ENV=$(printf 'BASE_DOMAIN=%s\nACME_EMAIL=%s\nCF_DNS_API_TOKEN=%s\nTRAEFIK_DASHBOARD_AUTH=%s\nGA4_MCP_PATH_TOKEN=%s\n' \
+            "$BASE_DOMAIN" "$ACME_EMAIL" "$CF_DNS_API_TOKEN" "$ESCAPED_AUTH" "$GA4_MCP_PATH_TOKEN" | base64 -w0)
 
           # GOOGLE_APPLICATION_CREDENTIALS path matches where the sa-key.json is written below
           GA4_ENV=$(printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\nGOOGLE_PROJECT_ID=%s\n' \
