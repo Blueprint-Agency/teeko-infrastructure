@@ -110,14 +110,10 @@ jobs:
           DEPLOY: ${{ steps.stacks.outputs.deploy }}
         run: |
           RSH="ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no"
-          for stack in $DEPLOY; do
-            # FANOUT is 'null' for hosts without a fanout map; default is the stack's own name.
-            DESTS=$(STACK="$stack" python3 -c "import json,os;f=json.loads(os.environ.get('FANOUT') or 'null') or {};s=os.environ['STACK'];print(' '.join(f.get(s,[s])))")
-            for d in $DESTS; do
-              echo "=== syncing $stack -> /root/stacks/$d"
-              rsync -rltz --exclude='.env' --exclude='.env.*' -e "$RSH" \
-                "$DIR/stacks/$stack/" "deploy@$SSH_HOST:/root/stacks/$d/"
-            done
+          python3 vps/shared/expand-targets.py $DEPLOY | while IFS='|' read -r d env_name stack; do
+            echo "=== syncing $stack -> /root/stacks/$d"
+            rsync -rltz --exclude='.env' --exclude='.env.*' -e "$RSH" \
+              "$DIR/stacks/$stack/" "deploy@$SSH_HOST:/root/stacks/$d/"
           done
 
       - name: Deploy and remove stacks
@@ -143,6 +139,7 @@ jobs:
           N8N_EDITOR_BASE_URL: ${{ vars.N8N_EDITOR_BASE_URL }}
           N8N_WEBHOOK_URL: ${{ vars.N8N_WEBHOOK_URL }}
           ENV_NAME: ${{ matrix.host.env_name }}
+          FANOUT: ${{ toJSON(matrix.host.fanout) }}
           DEPLOY: ${{ steps.stacks.outputs.deploy }}
           REMOVE: ${{ steps.stacks.outputs.remove }}
         run: |
@@ -193,10 +190,16 @@ jobs:
 
           GATEWAY_ENV=$(printf 'MASTERPASS=%s\n' "$GATEWAY_MASTERPASS" | base64 -w0)
 
+          # Expand stack names into dir|env_name|stack targets (fanout-aware).
+          TARGETS=$(python3 vps/shared/expand-targets.py $DEPLOY | tr '\n' ' ')
+          REMOVE_TARGETS=$(python3 vps/shared/expand-targets.py $REMOVE | tr '\n' ' ')
+          echo "Targets: $TARGETS"
+          echo "Remove:  $REMOVE_TARGETS"
+
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=no "deploy@$SSH_HOST" "
           set -e
-          DEPLOY='$DEPLOY'
-          REMOVE='$REMOVE'
+          TARGETS='$TARGETS'
+          REMOVE_TARGETS='$REMOVE_TARGETS'
           BASE_ENV='$BASE_ENV'
           GATEWAY_ENV='$GATEWAY_ENV'
           GA4_ENV='$GA4_ENV'
@@ -215,51 +218,73 @@ jobs:
           # workflow writes .env.* and runs 'docker compose up'. Skip the up here.
           APP_STACKS='${{ matrix.host.app_stacks }}'
 
-          for stack in \$DEPLOY; do
-            echo '=== Deploying '\$stack' ==='
-            mkdir -p /root/stacks/\$stack
-            echo \"\$BASE_ENV\" | base64 -d > /root/stacks/\$stack/.env
-            if echo \" \$APP_STACKS \" | grep -q \" \$stack \"; then
-              echo \"=== \$stack compose synced; up handled by app workflow ===\"
+          # TARGETS entries are dir|env_name|stack. dir == stack everywhere except
+          # bpvps2's booking: one repo stack deployed into two host dirs, each
+          # carrying its own env_name.
+          for target in \$TARGETS; do
+            dir=\$(echo \"\$target\" | cut -d'|' -f1)
+            env_name=\$(echo \"\$target\" | cut -d'|' -f2)
+            stack=\$(echo \"\$target\" | cut -d'|' -f3)
+            echo '=== Deploying '\$stack' -> /root/stacks/'\$dir' (ENV_NAME='\$env_name') ==='
+            mkdir -p /root/stacks/\$dir
+
+            # MERGE, never replace. Stacks carry host-managed keys CI knows nothing
+            # about (stalwart's mail secrets, booking's BOOKING_HOST/IMAGE_TAG).
+            # CI-owned keys win; every other line, comments included, is preserved.
+            NEW_ENV=\$(mktemp); KEPT=\$(mktemp)
+            { echo \"\$BASE_ENV\" | base64 -d; echo \"ENV_NAME=\$env_name\"; } > \$NEW_ENV
+            if [ -f /root/stacks/\$dir/.env ]; then
+              awk -F= 'NR==FNR { if (\$0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { split(\$0,a,\"=\"); k[a[1]]=1 } next }
+                       /^[A-Za-z_][A-Za-z0-9_]*=/ { split(\$0,a,\"=\"); if (a[1] in k) next }
+                       { print }' \$NEW_ENV /root/stacks/\$dir/.env > \$KEPT
+              cat \$NEW_ENV \$KEPT > /root/stacks/\$dir/.env
+            else
+              cp \$NEW_ENV /root/stacks/\$dir/.env
+            fi
+            rm -f \$NEW_ENV \$KEPT
+
+            if echo \" \$APP_STACKS \" | grep -q \" \$dir \"; then
+              echo \"=== \$dir compose synced; up handled by app workflow ===\"
               continue
             fi
             case \$stack in
               n8n)
-                echo \"\$N8N_APP_ENV\" | base64 -d > /root/stacks/n8n/.env.n8n
-                echo \"\$N8N_DB_ENV\"  | base64 -d > /root/stacks/n8n/.env.db-n8n ;;
+                echo \"\$N8N_APP_ENV\" | base64 -d > /root/stacks/\$dir/.env.n8n
+                echo \"\$N8N_DB_ENV\"  | base64 -d > /root/stacks/\$dir/.env.db-n8n ;;
               tools)
-                echo \"\$GATEWAY_ENV\" | base64 -d > /root/stacks/tools/.env.gateway ;;
+                echo \"\$GATEWAY_ENV\" | base64 -d > /root/stacks/\$dir/.env.gateway ;;
               ga4-mcp)
-                mkdir -p /root/stacks/ga4-mcp/credentials /root/stacks/ga4-mcp/dex-data
-                echo \"\$GA4_SA_KEY\" | base64 -d > /root/stacks/ga4-mcp/credentials/sa-key.json
-                chmod 644 /root/stacks/ga4-mcp/credentials/sa-key.json
-                echo \"\$GA4_ENV\"    | base64 -d > /root/stacks/ga4-mcp/.env.ga4-mcp
-                echo \"\$GA4_GATEWAY_CFG\" | base64 -d > /root/stacks/ga4-mcp/gateway-config.yaml
-                echo \"\$GA4_DEX_CFG\"     | base64 -d > /root/stacks/ga4-mcp/dex-config.yaml
-                chown -R 1001:1001 /root/stacks/ga4-mcp/dex-data ;;
+                mkdir -p /root/stacks/\$dir/credentials /root/stacks/\$dir/dex-data
+                echo \"\$GA4_SA_KEY\" | base64 -d > /root/stacks/\$dir/credentials/sa-key.json
+                chmod 644 /root/stacks/\$dir/credentials/sa-key.json
+                echo \"\$GA4_ENV\"    | base64 -d > /root/stacks/\$dir/.env.ga4-mcp
+                echo \"\$GA4_GATEWAY_CFG\" | base64 -d > /root/stacks/\$dir/gateway-config.yaml
+                echo \"\$GA4_DEX_CFG\"     | base64 -d > /root/stacks/\$dir/dex-config.yaml
+                chown -R 1001:1001 /root/stacks/\$dir/dex-data ;;
               gsc-mcp)
-                mkdir -p /root/stacks/gsc-mcp/credentials
-                echo \"\$GSC_SA_KEY\"      | base64 -d > /root/stacks/gsc-mcp/credentials/sa-key.json
-                chmod 644 /root/stacks/gsc-mcp/credentials/sa-key.json
-                echo \"\$GSC_ENV\"         | base64 -d > /root/stacks/gsc-mcp/.env.gsc-mcp
-                echo \"GSC_MCP_PATH_TOKEN=\$GSC_MCP_PATH_TOKEN\" >> /root/stacks/gsc-mcp/.env
-                echo \"\$GSC_GATEWAY_CFG\" | base64 -d > /root/stacks/gsc-mcp/gateway-config.yaml
-                echo \"\$GSC_DEX_CFG\"     | base64 -d > /root/stacks/gsc-mcp/dex-config.yaml
-                mkdir -p /root/stacks/gsc-mcp/dex-data
-                chown -R 1001:1001 /root/stacks/gsc-mcp/dex-data ;;
+                mkdir -p /root/stacks/\$dir/credentials
+                echo \"\$GSC_SA_KEY\"      | base64 -d > /root/stacks/\$dir/credentials/sa-key.json
+                chmod 644 /root/stacks/\$dir/credentials/sa-key.json
+                echo \"\$GSC_ENV\"         | base64 -d > /root/stacks/\$dir/.env.gsc-mcp
+                echo \"GSC_MCP_PATH_TOKEN=\$GSC_MCP_PATH_TOKEN\" >> /root/stacks/\$dir/.env
+                echo \"\$GSC_GATEWAY_CFG\" | base64 -d > /root/stacks/\$dir/gateway-config.yaml
+                echo \"\$GSC_DEX_CFG\"     | base64 -d > /root/stacks/\$dir/dex-config.yaml
+                mkdir -p /root/stacks/\$dir/dex-data
+                chown -R 1001:1001 /root/stacks/\$dir/dex-data ;;
             esac
-            cd /root/stacks/\$stack
+            cd /root/stacks/\$dir
             docker compose up -d --remove-orphans
             docker image prune -af
-            echo '=== '\$stack' done ==='
+            echo '=== '\$dir' done ==='
           done
 
-          for stack in \$REMOVE; do
-            echo '=== Removing '\$stack' ==='
-            if [ -d /root/stacks/\$stack ]; then
-              cd /root/stacks/\$stack && docker compose down --remove-orphans
-              rm -rf /root/stacks/\$stack
+          for target in \$REMOVE_TARGETS; do
+            dir=\$(echo \"\$target\" | cut -d'|' -f1)
+            echo '=== Removing '\$dir' ==='
+            if [ -d /root/stacks/\$dir ]; then
+              cd /root/stacks/\$dir && docker compose down --remove-orphans
+              rm -rf /root/stacks/\$dir
             fi
-            echo '=== '\$stack' removed ==='
+            echo '=== '\$dir' removed ==='
           done
           "
