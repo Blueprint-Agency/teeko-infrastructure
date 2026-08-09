@@ -322,18 +322,54 @@ way in without recreating a rule. Verified after sync: TCP 22 refused on both pu
 > even when open. Test server-to-server (`ssh bp-vps3-prod` → `/dev/tcp/<ip>/<port>`). Port **587**
 > reads BLOCKED because nothing listens on it, not because of the firewall.
 
-> ⚠️ **bpvps1 and bpvps2 are user-owned Tailscale nodes, not tagged, so their keys EXPIRE** —
-> bpvps1 `2026-12-23`, bpvps2 `2027-01-17`. When a key expires the node leaves the tailnet; with 22
-> restricted to the tailnet that means no SSH at all, recoverable only via Hostinger's browser
-> console. Fix once in the Tailscale admin console: **Machines → ⋯ → Disable key expiry** on both.
-> (VPS1/2/3 are `tag:ci` tagged devices and do not expire.) There is no Tailscale API token in
-> `.env`, so this cannot be scripted.
+> ⚠️ **ALL FIVE nodes have keys that EXPIRE — this is a dated lockout, not a warning.**
+> Checked on every host 2026-08-09 (`tailscale status --json` → `Self.KeyExpiry`, with no
+> `KeyExpiryDisabled` field present on any of them):
+>
+> | Node | Tag | Key expires |
+> |---|---|---|
+> | vps1-staging, vps2-prod, vps3-prod | `tag:server` | **2026-12-14** |
+> | bpvps1 | user-owned | **2026-12-23** |
+> | bpvps2 | user-owned | **2027-01-17** |
+>
+> When a key expires the node drops off the tailnet. With port 22 closed to the internet that means
+> **no SSH at all** — recoverable only through Hostinger's browser console. On 2026-12-14 that
+> would hit staging *and both Teeko production hosts at once*.
+>
+> Fix in the Tailscale admin console: **Machines → select → ⋯ → Disable key expiry**, on all five.
+> There is no Tailscale API token in `.env`, so this cannot be scripted. (The `TS_OAUTH_*` GitHub
+> org secrets are for the deploy action; GitHub never returns secret values, so they can't be
+> reused here.)
 
-**VPS1 (staging):** Open **22**, **80**, **443**
+> An earlier version of this file claimed VPS1/2/3 were `tag:ci` devices that "do not expire".
+> Both halves were wrong: the tag is `tag:server`, and they carry the **earliest** expiry of the
+> five. Tagged devices only skip expiry when it has been explicitly disabled — the tag alone does
+> not do it. Verify with `Self.KeyExpiry` rather than assuming.
 
-**VPS2 + VPS3 (prod):** Open **22**, **80**, **443**. Port **9001** (portainer-agent) is no longer needed — close it.
+**Port 22 status, verified 2026-08-09** (tested from a laptop *and* server-to-server, since a home
+ISP can produce false negatives):
+
+| Host | 22 from the internet |
+|---|---|
+| bpvps1, bpvps2 | **closed** — restricted to `100.64.0.0/10` on group 319466, synced |
+| vps2-prod | **closed** — done in hPanel |
+| vps1-staging, vps3-prod | **still OPEN** — edited in hPanel but not yet in effect |
+
+> VPS1/VPS3 almost certainly need the same **sync** step that group 319466 did: an edited firewall
+> is inert until it is pushed to each VM, and hPanel shows the new rule either way. These two live
+> in the Hostinger account we hold no token for, so it cannot be checked or synced via API — it is
+> hPanel-only. Re-test with `/dev/tcp/<ip>/22` from another VPS afterwards.
+
+Otherwise open: **80**, **443**. Port **9001** (portainer-agent) is no longer needed — close it.
 
 Close everything else — especially 3000, 5432, 5678, 8080, 9090 (all accessed via Traefik only)
+
+> `/root/stacks/_preflight_20260809/` (pre-refactor env backups + n8n dumps) was **deleted from all
+> hosts on 2026-08-09**, once every deploy path had been verified. Two of the six dirs were nested
+> *inside* a stack (`/root/stacks/n8n/_preflight_20260809/`, holding a 297 MB `n8n.sql`), so a check
+> of `/root/stacks/_preflight_*` alone reported "absent" on VPS3 while 284 MB sat one level down.
+> Search with `find /root/stacks -type d -name "_preflight_*"`. Note `deploy` cannot enumerate
+> `/root` (mode `drwx--x--x`) — a `find /` as `deploy` silently returns nothing.
 
 ### Docker 29.x breaks Traefik's Docker provider — fix differs per VPS
 Docker 29.x raises `MinAPIVersion` above 1.24. Traefik v3.3 **hardcodes** Docker API 1.24 and
