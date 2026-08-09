@@ -18,8 +18,10 @@
 !**/ci/.env.*
 !**/ci/credentials/sa-key.json
 
-# Claude Code local settings (contains tokens)
-.claude/
+# Claude Code local settings (contains tokens). Skills under .claude/skills/ are
+# repo procedure and MUST be committed -- keep this narrow.
+.claude/settings.local.json
+.claude/*.local.json
 
 # MCP config (contains tokens — use .mcp.json.example as template)
 .mcp.json
