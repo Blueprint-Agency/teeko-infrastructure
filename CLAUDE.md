@@ -297,11 +297,19 @@ because an edited-but-unsynced group silently keeps the old rules.
 Current 319466 rules: **25, 80, 443, 465, 587, 993, 995** `accept TCP` from any, plus **22**
 `accept TCP` from **`100.64.0.0/10` only** (the Tailscale CGNAT range) as of 2026-08-09.
 
-> ⚠️ **As of 2026-08-09 group 319466 is edited but `is_synced: false`.** The port-22 restriction is
-> staged and **not in effect** — both hosts still accept SSH from anywhere until each VM is synced.
-> Sync in hPanel (or `VPS_syncFirewallV1` for VM `1778283` = bpvps1 and `1831058` = bpvps2).
-> Rule 22 was **restricted rather than deleted** deliberately: it is reversible, self-documenting,
-> and the tailnet source keeps a path in that does not depend on deleting/recreating a rule.
+**Port 22 on bpvps1 + bpvps2 is closed to the internet as of 2026-08-09.** Rule 22 was
+**restricted rather than deleted** — reversible, self-documenting, and the tailnet source keeps a
+way in without recreating a rule. Verified after sync: TCP 22 refused on both public IPs, SSH over
+`100.x` working, 443 and all mail ports unaffected, kaiteki + booking serving 200.
+
+> Syncing **one** VM applied the group to **both** — expected, since 319466 is shared. The sync
+> action sits in state `started` for ~100s before `success`; the rules do **not** take effect until
+> then. Poll `/virtual-machines/<id>/actions/<actionId>` rather than trusting the group's
+> `is_synced` flag, which flips to `true` while the action is still running.
+
+> Testing ports from a laptop is unreliable: home ISPs block outbound **25**, so it reads BLOCKED
+> even when open. Test server-to-server (`ssh bp-vps3-prod` → `/dev/tcp/<ip>/<port>`). Port **587**
+> reads BLOCKED because nothing listens on it, not because of the firewall.
 
 > ⚠️ **bpvps1 and bpvps2 are user-owned Tailscale nodes, not tagged, so their keys EXPIRE** —
 > bpvps1 `2026-12-23`, bpvps2 `2027-01-17`. When a key expires the node leaves the tailnet; with 22
