@@ -120,7 +120,7 @@ SSH key: `~/.ssh/infra_ed25519`. All hosts log in as **`deploy`**, not root — 
 
 ## Architecture
 
-- 3 Hostinger VPS, Docker Compose, no Kubernetes
+- 5 Hostinger VPS across two accounts, Docker Compose, no Kubernetes
 - Reverse proxy: Traefik on all VPS (Let's Encrypt via Cloudflare DNS), ports 80→443
 - Container registry: DockerHub — `blueprintagency/<app>:<tag>`
 - Databases: local PostgreSQL per app (migrating to Supabase); n8n keeps local Postgres
@@ -148,13 +148,46 @@ copy-pasted ~120-line jobs). `vps/hosts.json` is the source of truth:
 
 **Adding a host**: one entry in `vps/hosts.json` + a GitHub Environment named after its `key`,
 containing at minimum `TAILSCALE_HOST`. Helper scripts: `vps/shared/select-hosts.py` (diff → hosts),
-`vps/shared/expand-targets.py` (stack → `dir|env_name|stack`), `vps/shared/snapshot-host.sh`
-(before/after docker state, for verifying a deploy changed only what you expected).
+`vps/shared/expand-targets.py` (stack → `dir|env_name|stack`), `vps/shared/render-ci.py`
+(stack `ci/` templates → rendered files), `vps/shared/snapshot-host.sh` (before/after docker state,
+for verifying a deploy changed only what you expected).
+
+### Per-stack secrets live in `ci/`, never in the workflow
+
+**`deploy-infra.yml` knows nothing about any individual stack.** A stack that needs generated files
+carries them itself, in `vps/<host>/stacks/<stack>/ci/`, as templates with `@@MARKER@@` placeholders.
+`render-ci.py` fills each marker from the same-named env var in the deploy step and rsyncs the result.
+
+| Path under `ci/` | Lands on the host as | Notes |
+|---|---|---|
+| `.env.n8n`, `gateway-config.yaml`, … | `/root/stacks/<dir>/<same path>` | overwritten every deploy |
+| `credentials/sa-key.json` | `/root/stacks/<dir>/credentials/sa-key.json` | subdirs are preserved |
+| `env.ci` | merged **into** `.env` | for keys the stack's own compose interpolates |
+| `post-sync.sh` | run in the stack dir before `docker compose up` | the `mkdir`/`chmod`/`chown` a stack needs |
+
+**Adding a stack that needs a secret**: add the template under `ci/`, add the secret to the deploy
+step's `env:` block, add it to the host's GitHub Environment. Never add a branch to the workflow.
+
+> An unset or empty marker **fails the deploy**. This is deliberate: a blank secret is not a smaller
+> failure than a missing file — it is a Dex with no admin password that starts happily and serves
+> 401s, or a Postgres that initialises a brand new empty database. `render-ci.py` names the variable
+> and the file and exits 1. `vps/shared/test_render_ci.py` covers this and runs as a CI step.
+
+> Until 2026-08-09 all of this was a `case $stack in` block plus ~30 `printf | base64` lines inside
+> the workflow's remote-shell string. That coupling is why `stalwart` was excluded ("no CI case
+> arm") and why `.env.db-waba` is still host-only — onboarding a stack meant editing YAML-inside-
+> shell-inside-ssh. The rendered output is byte-identical to what that block produced.
 
 > **`.env` is MERGED, not replaced.** CI-owned keys (`BASE_DOMAIN`, `ACME_EMAIL`,
-> `CF_DNS_API_TOKEN`, `TRAEFIK_DASHBOARD_AUTH`, `GA4_MCP_PATH_TOKEN`, `ENV_NAME`) win; every other
-> line, comments included, is preserved. This is what lets stacks keep host-managed values such as
-> booking's `BOOKING_HOST`/`IMAGE_TAG`. Before 2026-08-09 it overwrote the file wholesale.
+> `CF_DNS_API_TOKEN`, `TRAEFIK_DASHBOARD_AUTH`, `ENV_NAME`, plus whatever the stack's own `ci/env.ci`
+> contributes) win; every other line, comments included, is preserved. This is what lets stacks keep
+> host-managed values such as booking's `BOOKING_HOST`/`IMAGE_TAG`. Before 2026-08-09 it overwrote
+> the file wholesale.
+
+> `GA4_MCP_PATH_TOKEN` left the host-wide key list on 2026-08-09 and moved to
+> `ga4-mcp/ci/env.ci`, where it belongs — only ga4-mcp's compose reads it, but it was previously
+> written into **every** stack's `.env` on **every** host. Stale copies still sit in other stacks'
+> `.env` files; they are inert, and the merge no longer refreshes them.
 
 > **`env_name` is per fanout destination, not per host.** bpvps2 deploys one `booking` compose into
 > `booking-staging` and `booking-prod`. A host-level `ENV_NAME` would give both `prod`, making
@@ -166,7 +199,7 @@ containing at minimum `TAILSCALE_HOST`. Helper scripts: `vps/shared/select-hosts
 | Host | Excluded | Reason |
 |---|---|---|
 | bpvps1 | `stalwart`, `traefik`, `wordpress` | dirs are `root:root`; CI connects as `deploy` and rsync fails |
-| bpvps2 | `stalwart` | holds hand-managed mail secrets with no CI case arm |
+| bpvps2 | `stalwart` | hand-managed mail secrets; now onboardable via `ci/` — needs the secrets adding to the Environment first |
 | VPS1, VPS2 | `website` | deployed by their own repo's CI |
 
 > A stack dir must be owned by **`deploy`** for CI to deploy it. `vps1-staging/tools` was `root:root`
@@ -250,7 +283,8 @@ Contents either way: `[Service]` + `Environment="DOCKER_MIN_API_VERSION=1.24"`, 
 > the unit name. Must reapply if Docker is reinstalled.
 
 ### Shared Scripts
-`vps/shared/` — `select-hosts.py`, `expand-targets.py`, `snapshot-host.sh`, `setup-vps.sh`.
+`vps/shared/` — `select-hosts.py`, `expand-targets.py`, `render-ci.py`, `test_render_ci.py`,
+`snapshot-host.sh`, `setup-vps.sh`.
 `scripts/backup.sh <bp-alias>` tars every named volume on that host into `/home/deploy/backups/`.
 
 > `deploy.sh` and `healthcheck.sh` were **deleted 2026-08-09** — both `cd`'d into `vps/<host>/`,

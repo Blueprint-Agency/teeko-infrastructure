@@ -1,6 +1,6 @@
-# TEMPLATE — the deploy workflow (deploy-infra.yml) overwrites this file on VPS3 with the
-# @@GSC_MCP_PATH_TOKEN@@ marker replaced by the real secret. Do not put real secrets here.
-host: https://gsc.teeko.ai/
+# TEMPLATE, rendered by vps/shared/render-ci.py -> /root/stacks/gsc-mcp/gateway-config.yaml.
+# Placeholders are filled from the host's GitHub Environment. No real secrets here.
+host: https://gsc.@@BASE_DOMAIN@@/
 authorization:
   server: http://gsc-dex:5556/
   authorizationProxyEnabled: true

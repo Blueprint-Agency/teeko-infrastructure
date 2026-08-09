@@ -11,6 +11,13 @@
 # deploy rsync --exclude rules).
 **/credentials/sa-key.json
 
+# ...but everything under a stack's ci/ is a TEMPLATE carrying @@MARKER@@ placeholders,
+# never a real value, and MUST be committed -- it is the input render-ci.py fills in at
+# deploy time. Without these negations the templates are silently untracked and CI
+# renders nothing. Keep them narrow: only ci/ is exempt.
+!**/ci/.env.*
+!**/ci/credentials/sa-key.json
+
 # Claude Code local settings (contains tokens)
 .claude/
 

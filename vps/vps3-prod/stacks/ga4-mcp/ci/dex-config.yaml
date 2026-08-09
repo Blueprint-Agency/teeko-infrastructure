@@ -1,6 +1,7 @@
-# TEMPLATE — deploy-infra.yml overwrites this on VPS3 with @@markers@@ replaced.
-# sqlite3 on ./dex-data so tokens/signing keys survive restarts. issuer MUST equal public host.
-issuer: https://ga4.teeko.ai
+# TEMPLATE, rendered by vps/shared/render-ci.py -> /root/stacks/ga4-mcp/dex-config.yaml.
+# storage is sqlite3 on the ./dex-data bind mount so signing keys + tokens survive
+# restarts (memory storage was causing forced re-logins). issuer MUST equal the public host.
+issuer: https://ga4.@@BASE_DOMAIN@@
 web:
   http: 0.0.0.0:5556
   allowedOrigins:

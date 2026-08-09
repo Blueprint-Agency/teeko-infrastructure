@@ -1,5 +1,6 @@
-# TEMPLATE — deploy-infra.yml overwrites this on VPS3 with @@GA4_MCP_PATH_TOKEN@@ replaced.
-host: https://ga4.teeko.ai/
+# TEMPLATE, rendered by vps/shared/render-ci.py -> /root/stacks/ga4-mcp/gateway-config.yaml.
+# Placeholders are filled from the host's GitHub Environment. No real secrets here.
+host: https://ga4.@@BASE_DOMAIN@@/
 authorization:
   server: http://ga4-dex:5556/
   authorizationProxyEnabled: true
