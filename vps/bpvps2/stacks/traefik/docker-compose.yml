@@ -17,6 +17,24 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      # Second resolver, TLS-ALPN-01 (:443), NO credentials.
+      #
+      # `letsencrypt` above is DNS-01 against Cloudflare, and CF_DNS_API_TOKEN is
+      # scoped to the TEEKO account (teeko.ai only). Cloudflare tokens cannot span
+      # accounts, and Traefik reads CF_DNS_API_TOKEN process-wide -- so a second
+      # DNS-01 resolver would silently reuse the same teeko token. That is why
+      # booking's move to reservetoday.app (BLUEPRINT account) failed with
+      # "zone could not be found".
+      #
+      # TLS-ALPN-01 sidesteps the credential problem entirely: it proves control
+      # over :443, so it needs no API token and no account boundary. Requires the
+      # record to be DNS-only -- a Cloudflare-proxied (orange) host terminates TLS
+      # at the edge and the challenge never reaches this box. Both
+      # api*.reservetoday.app records are grey on purpose. No wildcards from this
+      # resolver; use `letsencrypt` for those.
+      - "--certificatesresolvers.le-tls.acme.tlschallenge=true"
+      - "--certificatesresolvers.le-tls.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.le-tls.acme.storage=/letsencrypt/acme-tls.json"
       - "--log.level=INFO"
     ports:
       - "80:80"

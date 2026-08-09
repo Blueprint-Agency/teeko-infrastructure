@@ -43,7 +43,10 @@ services:
       - "traefik.docker.network=proxy"
       - "traefik.http.routers.booking-be-${ENV_NAME}.rule=Host(`${BOOKING_FQDN}`)"
       - "traefik.http.routers.booking-be-${ENV_NAME}.entrypoints=websecure"
-      - "traefik.http.routers.booking-be-${ENV_NAME}.tls.certresolver=letsencrypt"
+      # le-tls, not letsencrypt: booking is on reservetoday.app (Blueprint CF
+      # account) and the DNS-01 resolver's token only covers teeko.ai. See the
+      # traefik stack for why this can't be fixed with a token swap.
+      - "traefik.http.routers.booking-be-${ENV_NAME}.tls.certresolver=le-tls"
       - "traefik.http.services.booking-be-${ENV_NAME}.loadbalancer.server.port=4000"
     networks:
       - proxy
