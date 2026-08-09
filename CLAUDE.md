@@ -250,4 +250,10 @@ Contents either way: `[Service]` + `Environment="DOCKER_MIN_API_VERSION=1.24"`, 
 > the unit name. Must reapply if Docker is reinstalled.
 
 ### Shared Scripts
-`vps/shared/` — deploy, healthcheck, VPS setup scripts
+`vps/shared/` — `select-hosts.py`, `expand-targets.py`, `snapshot-host.sh`, `setup-vps.sh`.
+`scripts/backup.sh <bp-alias>` tars every named volume on that host into `/home/deploy/backups/`.
+
+> `deploy.sh` and `healthcheck.sh` were **deleted 2026-08-09** — both `cd`'d into `vps/<host>/`,
+> which holds no compose file, and ran `docker compose` on your laptop rather than the VPS. They
+> also named aliases (`prod-vps2`) that never existed. Deploy is `deploy-infra.yml`; health is
+> `snapshot-host.sh`.

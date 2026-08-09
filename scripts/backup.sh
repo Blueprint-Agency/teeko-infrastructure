@@ -1,31 +1,28 @@
-#!/bin/bash
-# Backup Docker volumes for a VPS
-# Usage: ./backup.sh <vps-alias>
-# Backs up all named volumes to /opt/backups/<date>/
-
+#!/usr/bin/env bash
+# Back up a host's named Docker volumes to /home/deploy/backups/<timestamp>/ ON that host.
+# Usage: ./scripts/backup.sh bp-vps3-prod
+#
+# Runs over ssh in the same shape as vps/shared/snapshot-host.sh -- the previous version
+# took a <vps-alias> argument and then ran docker LOCALLY, so it never touched a VPS.
+# Writes under /home/deploy because `deploy` has no sudo and cannot create /opt/backups.
 set -euo pipefail
+HOST="${1:?usage: backup.sh <ssh-alias>   e.g. bp-vps3-prod}"
 
-VPS_ALIAS="${1:?Usage: ./backup.sh <vps-alias>}"
-BACKUP_DIR="/opt/backups/$(date +%Y-%m-%d_%H%M%S)"
+ssh -o ConnectTimeout=15 -o BatchMode=yes "$HOST" '
+  set -euo pipefail
+  BACKUP_DIR="/home/deploy/backups/$(date +%Y-%m-%d_%H%M%S)"
+  mkdir -p "$BACKUP_DIR"
+  echo "==> $BACKUP_DIR"
 
-echo "==> Creating backup directory: ${BACKUP_DIR}"
-mkdir -p "$BACKUP_DIR"
+  # Named volumes only: the 64-hex ones are anonymous and not worth keeping.
+  docker volume ls --format "{{.Name}}" | grep -vE "^[0-9a-f]{64}$" | while read -r v; do
+    echo "    $v"
+    docker run --rm -v "$v:/source:ro" -v "$BACKUP_DIR:/backup" \
+      alpine tar czf "/backup/$v.tar.gz" -C /source .
+  done
 
-echo "==> Backing up Docker volumes for ${VPS_ALIAS}..."
-
-# Get all named volumes (excludes anonymous volumes)
-for VOLUME in $(docker volume ls --format '{{.Name}}' | grep -v '^[0-9a-f]\{64\}$'); do
-  echo "    Backing up volume: ${VOLUME}"
-  docker run --rm \
-    -v "${VOLUME}:/source:ro" \
-    -v "${BACKUP_DIR}:/backup" \
-    alpine tar czf "/backup/${VOLUME}.tar.gz" -C /source .
-done
-
-echo ""
-echo "==> Backup complete: ${BACKUP_DIR}"
-ls -lh "$BACKUP_DIR"
-
-# Clean up backups older than 30 days
-echo "==> Cleaning up backups older than 30 days..."
-find /opt/backups -maxdepth 1 -type d -mtime +30 -exec rm -rf {} + 2>/dev/null || true
+  echo "==> done"
+  du -sh "$BACKUP_DIR"
+  # Keep 30 days. -mindepth 1 so the parent itself is never a deletion candidate.
+  find /home/deploy/backups -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} + 2>/dev/null || true
+'

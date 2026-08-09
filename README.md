@@ -1,155 +1,85 @@
 # Infrastructure
 
-Central infrastructure-as-code repository for Blueprint-Agency. Manages 3 Hostinger VPS, Docker deployments, and CI/CD.
+Central infrastructure-as-code repo for Blueprint-Agency. Five Hostinger VPS, Docker Compose, Traefik, GitHub Actions CD.
+
+> **[CLAUDE.md](CLAUDE.md) is the source of truth** for host inventory, SSH aliases, account boundaries,
+> MCP servers, and CI semantics. This file is the short orientation; CLAUDE.md is what you act on.
 
 ## Architecture
 
 ```
-Developer → push to staging/main → GitHub Actions (CI) → DockerHub
+push to main (vps/**) → GHA detect → matrix deploy → rsync compose + merge .env → docker compose up
                                           │
-                                          ▼
-                                GitHub Actions (CD)
-                                          │
-                      ┌───────────────────┼───────────────────┐
-                      ▼                   ▼                   ▼
-                VPS1 (Staging)      VPS2 (Prod)         VPS3 (Prod)
-                2 vCPU / 8GB        4 vCPU / 16GB       4 vCPU / 16GB
-                Teeko Site          Teeko Site           n8n Production
-                Teeko Webapp
-                n8n Dev
+      ┌──────────────┬──────────────┬─────┴────────┬──────────────┐
+      ▼              ▼              ▼              ▼              ▼
+ vps1-staging    vps2-prod     vps3-prod       bpvps1         bpvps2
+   (Teeko)        (Teeko)       (Teeko)       (Kaiteki)      (Booking)
 ```
 
-- **Reverse proxy**: Traefik on all VPS (auto-discovery, Let's Encrypt via Cloudflare DNS)
+- **Reverse proxy**: Traefik on every host (Let's Encrypt via Cloudflare DNS-01)
 - **Registry**: DockerHub — `blueprintagency/<app>:<tag>`
-- **Databases**: Local PostgreSQL per app (migrating to Supabase); n8n keeps local Postgres
-- **External**: Supabase, Auth0, Stripe
+- **Databases**: local PostgreSQL per app (migrating to Supabase); n8n keeps local Postgres
+- **Deploy target list**: [`vps/hosts.json`](vps/hosts.json) — adding a host is one entry there plus a
+  GitHub Environment named after its `key`
 
-## What's Running
-
-| VPS | Stacks |
-|-----|--------|
-| VPS1 — Staging | `traefik`, `website` (staging.teeko.ai), `n8n` (stagingn8n.teeko.ai), `tools` (drizzle-gateway at stagingpg.teeko.ai) |
-| VPS2 — Prod | `traefik`, `website` (teeko.ai), `tools` (drizzle-gateway at pg.teeko.ai) |
-| VPS3 — Prod | `traefik`, `n8n` (n8n.teeko.ai), `tools` (drizzle-gateway at pg3.teeko.ai), `ga4-mcp`, `gsc-mcp`, `booking-system`, `ehailing` |
-
-## CI/CD Flow
-
-| Branch | Target | Action |
-|--------|--------|--------|
-| `staging` | VPS1 | Build image → push to DockerHub → SSH deploy |
-| `main` | VPS2 or VPS3 | Same, production tags |
+See CLAUDE.md → *What's Running* for the per-host stack inventory.
 
 ## Repository Structure
 
 ```
 ├── vps/
-│   ├── vps1-staging/stacks/       Per-stack compose files for VPS1
-│   ├── vps2-prod/stacks/          Per-stack compose files for VPS2
-│   ├── vps3-prod/stacks/          Per-stack compose files for VPS3
-│   └── shared/                    Deploy, healthcheck, setup scripts
+│   ├── hosts.json                 Deploy targets — source of truth for CI
+│   ├── <host>/stacks/<stack>/     docker-compose.yml per stack, per host
+│   └── shared/                    select-hosts.py, expand-targets.py, snapshot-host.sh, setup-vps.sh
 ├── apps/registry.yml              App → VPS mapping, images, ports, domains
+├── scripts/backup.sh              Volume backup (run ON a host, not from here)
 ├── .env.example                   Credentials template
 └── .mcp.json.example              MCP server config template
 ```
 
 ## Setup (New DevOps Member)
 
-### 1. Prerequisites
-- Node.js (for `npx`)
-- Claude Code CLI or desktop app
-
-### 2. Clone & Configure
 ```bash
-git clone <repo-url>
-cd infrastructure
-cp .env.example .env
+git clone <repo-url> && cd infrastructure
+cp .env.example .env            # credentials — ask @chriskke
+cp .mcp.json.example .mcp.json  # MCP tokens; Claude Code starts the servers automatically
 ```
 
-Fill in `.env`:
-- VPS credentials (get from @chriskke)
-- `GITHUB_PERSONAL_ACCESS_TOKEN` — GitHub PAT with repo + org read/write
+**SSH**: ask @chriskke for the host entries. Every Blueprint host alias is prefixed `bp-`, logs in as
+`deploy`, and uses `~/.ssh/infra_ed25519`.
 
-### 3. SSH Key Setup
-Ask @chriskke to add your public key to all VPS. Then add to `~/.ssh/config`:
+> ⚠️ The bare aliases `vps1-staging` / `vps2-prod` in a shared `~/.ssh/config` belong to a
+> **different client**. Always use the `bp-` prefix. See CLAUDE.md → *VPS Access*.
 
-```
-Host vps1-staging
-    HostName <VPS1_IP>
-    User root
-    IdentityFile ~/.ssh/<your-key>
-    StrictHostKeyChecking accept-new
-
-Host vps2-prod
-    HostName <VPS2_IP>
-    User root
-    IdentityFile ~/.ssh/<your-key>
-    StrictHostKeyChecking accept-new
-
-Host vps3-prod
-    HostName <VPS3_IP>
-    User root
-    IdentityFile ~/.ssh/<your-key>
-    StrictHostKeyChecking accept-new
-```
-
-Verify: `ssh vps1-staging "hostname"`
-
-### 4. MCP Setup
-```bash
-cp .mcp.json.example .mcp.json
-```
-Fill in your tokens (Cloudflare API token, n8n API key, Vercel API token). Open the repo in Claude Code — MCP servers start automatically.
+Verify: `ssh bp-vps1-staging "hostname"`
 
 ## Common Operations
 
-### Deploy
 ```bash
-# Automated — just push to branch
-git push origin staging   # → deploys to VPS1
-git push origin main      # → deploys to VPS2/VPS3
+# Deploy — push to main; changes under vps/<host>/ select that host automatically
+git push origin main
 
-# Manual deploy on VPS
-ssh vps1-staging
+# Manual deploy / rollback on a host (pin the tag in docker-compose.yml first to roll back)
+ssh bp-vps1-staging
 cd /root/stacks/<stack> && docker compose pull <service> && docker compose up -d <service>
-```
-
-### Rollback
-```bash
-ssh vps2-prod
-cd /root/stacks/<stack>
-# Edit docker-compose.yml to pin to known-good tag, then:
-docker compose pull <service> && docker compose up -d <service>
 docker compose ps && docker compose logs -f <service>
+
+# Diff a host's docker state before/after a deploy
+./vps/shared/snapshot-host.sh bp-vps1-staging
 ```
 
-### Adding a New App
-1. Add entry to `apps/registry.yml`
-2. Add service to target VPS stack compose file
-3. Add GitHub environment secrets: `VPS_HOST`, `SSH_PRIVATE_KEY`, `DOCKERHUB_TOKEN` + app-specific vars
+**Adding an app**: entry in `apps/registry.yml` → service in the target stack's compose file →
+any app-specific GitHub Environment secrets.
 
 ## Firewall
 
-All VPS — managed via **Hostinger VPS panel**:
-
-| Port | Status | Purpose |
-|------|--------|---------|
-| 22 | **Open** | SSH |
-| 80 | **Open** | HTTP (Traefik redirects to 443) |
-| 443 | **Open** | HTTPS (Traefik terminates TLS) |
-| 9001 | **Open on VPS2/VPS3** | Portainer agent (required for Portainer on VPS1) |
-| All others | **Closed** | Apps accessible via Traefik only |
-
-## GitHub Actions Secrets (per environment)
-
-| Secret | Description |
-|--------|-------------|
-| `VPS_HOST` | VPS IP address |
-| `SSH_PRIVATE_KEY` | SSH deploy key |
-| `DOCKERHUB_USERNAME` | DockerHub org |
-| `DOCKERHUB_TOKEN` | DockerHub access token |
+Ports **22**, **80**, **443** open on all hosts; everything else closed (apps reach the world through
+Traefik only). bpvps1 + bpvps2 share firewall group `319466` — editing it hits both, and rules must be
+re-synced onto each VPS after editing. See CLAUDE.md → *Firewall* for the account split and the full
+rule list.
 
 ## Team
 
 | Member | Role |
 |--------|------|
-| @chriskke | DevOps Lead — sole devops, admin on all VPS and GitHub org |
+| @chriskke | DevOps Lead — sole devops, admin on all VPS and the GitHub org |
