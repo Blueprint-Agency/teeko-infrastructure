@@ -1,28 +1,53 @@
 {
+  "_comment_accounts": "ONLY Cloudflare and Hostinger are split across two accounts -- those get a <tool>-<account> suffix so the tool name says which account a call hits, and there is deliberately no generic 'cloudflare' or 'hostinger' server. Vercel, GitHub and Tailscale are single-tenant (one Vercel team, one GitHub org, one tailnet) and carry NO suffix. Do not add one; it would imply a split that does not exist.",
+  "_comment_hostinger": "hostinger-api-mcp ships one binary per product area. Use the scoped binary, never 'hostinger-api-mcp' (314 tools). Add more areas by copying a block and swapping the binary name: hostinger-{vps,dns,domains,hosting,billing,mail,reach,wordpress,ecommerce,agency-hosting,horizons}-mcp. Only add one when that account actually owns resources of that type -- verify with: curl -H \"Authorization: Bearer $TOKEN\" https://developers.hostinger.com/api/domains/v1/portfolio",
+  "_comment_npx": "npx.cmd is the Windows form. n8n-teeko still uses 'cmd /c npx' because it works and was left alone.",
   "mcpServers": {
-    "vercel": {
-      "type": "http",
-      "url": "https://mcp.vercel.com",
-      "headers": {
-        "Authorization": "Bearer <VERCEL_API_TOKEN>"
-      }
-    },
-    "cloudflare": {
+    "cloudflare-teeko": {
       "type": "http",
       "url": "https://mcp.cloudflare.com/mcp",
       "headers": {
-        "Authorization": "Bearer <CLOUDFLARE_API_TOKEN>"
+        "Authorization": "Bearer <CLOUDFLARE_TEEKO_API_TOKEN>"
       }
     },
-    "n8n-mcp": {
-      "command": "npx",
-      "args": ["n8n-mcp"],
+    "n8n-teeko": {
+      "command": "cmd",
+      "args": ["/c", "npx", "n8n-mcp"],
       "env": {
         "MCP_MODE": "stdio",
         "LOG_LEVEL": "error",
         "DISABLE_CONSOLE_OUTPUT": "true",
         "N8N_API_URL": "https://n8n.teeko.ai",
         "N8N_API_KEY": "<N8N_API_KEY>"
+      }
+    },
+
+    "cloudflare-blueprint": {
+      "type": "http",
+      "url": "https://mcp.cloudflare.com/mcp",
+      "headers": {
+        "Authorization": "Bearer <CLOUDFLARE_BLUEPRINT_API_TOKEN>"
+      }
+    },
+    "hostinger-vps-blueprint": {
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-vps-mcp"],
+      "env": {
+        "HOSTINGER_API_TOKEN": "<HOSTINGER_BLUEPRINT_API_TOKEN>"
+      }
+    },
+    "hostinger-billing-blueprint": {
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-billing-mcp"],
+      "env": {
+        "HOSTINGER_API_TOKEN": "<HOSTINGER_BLUEPRINT_API_TOKEN>"
+      }
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com",
+      "headers": {
+        "Authorization": "Bearer <VERCEL_API_TOKEN>"
       }
     }
   }

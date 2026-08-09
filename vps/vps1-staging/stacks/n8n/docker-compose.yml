@@ -1,33 +1,59 @@
-# deploy trigger 2026-03-29
+# n8n — one shape shared with VPS3. ENV_NAME (written into .env by CI from
+# vps/hosts.json) keys everything that would otherwise differ per host, the same
+# way the booking stack on bpvps2 does it.
+#
+# ⚠️ VOLUMES ARE DELIBERATELY NOT KEYED. n8n-data and n8n_pgdata are `external`
+# and are named IDENTICALLY on VPS1 and VPS3. Interpolating ENV_NAME into them
+# would point the stack at fresh empty volumes and orphan every workflow.
 services:
-  n8n-dev:
+  n8n:
     image: n8nio/n8n:latest
     pull_policy: always
-    container_name: n8n-dev
+    container_name: n8n-${ENV_NAME}
     restart: unless-stopped
-    env_file: .env.n8n-dev
-    # n8n must start after its postgres — crashes on startup if db-n8n isn't ready
+    env_file: .env.n8n
+    # n8n crashes on startup if postgres isn't ready, so gate on the healthcheck
+    # rather than on container start.
     depends_on:
-      - db-n8n
+      db-n8n:
+        condition: service_healthy
     volumes:
       - n8n-data:/home/node/.n8n
+    # Same approach as booking-be: the n8n image is node-based, so a global
+    # fetch is available and no curl/wget needs to exist in the image.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5678/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.n8n-dev.rule=Host(`stagingn8n.${BASE_DOMAIN}`)"
-      - "traefik.http.routers.n8n-dev.entrypoints=websecure"
-      - "traefik.http.routers.n8n-dev.tls.certresolver=letsencrypt"
-      - "traefik.http.services.n8n-dev.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n-${ENV_NAME}.rule=Host(`stagingn8n.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.n8n-${ENV_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.n8n-${ENV_NAME}.tls.certresolver=letsencrypt"
+      - "traefik.http.services.n8n-${ENV_NAME}.loadbalancer.server.port=5678"
     networks:
       - proxy
 
-  # NOTE: service named 'db-n8n' so n8n-dev can reach it as DB_POSTGRESDB_HOST=db-n8n
+  # NOTE: service named 'db-n8n' so n8n can reach it as DB_POSTGRESDB_HOST=db-n8n
+  # ⚠️ PIN THE MAJOR. This volume holds a PG18 data dir (PGDATA=/var/lib/postgresql/18/docker
+  # — the volume is mounted at the PARENT of PGDATA). `postgres:alpine` floats to the newest
+  # stable major, so leaving it unpinned means the day 19 goes stable a `compose up` starts
+  # PG19 binaries against a PG18 data dir and the container dies with "database files are
+  # incompatible with server". Bumping the major is a deliberate pg_upgrade/dump-restore job.
   db-n8n:
-    image: postgres:alpine
+    image: postgres:18-alpine
     container_name: n8n-db
     restart: unless-stopped
     env_file: .env.db-n8n
     volumes:
       - n8n_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - proxy
 
