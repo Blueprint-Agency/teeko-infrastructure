@@ -322,43 +322,36 @@ way in without recreating a rule. Verified after sync: TCP 22 refused on both pu
 > even when open. Test server-to-server (`ssh bp-vps3-prod` → `/dev/tcp/<ip>/<port>`). Port **587**
 > reads BLOCKED because nothing listens on it, not because of the firewall.
 
-> ⚠️ **ALL FIVE nodes have keys that EXPIRE — this is a dated lockout, not a warning.**
-> Checked on every host 2026-08-09 (`tailscale status --json` → `Self.KeyExpiry`, with no
-> `KeyExpiryDisabled` field present on any of them):
->
-> | Node | Tag | Key expires |
-> |---|---|---|
-> | vps1-staging, vps2-prod, vps3-prod | `tag:server` | **2026-12-14** |
-> | bpvps1 | user-owned | **2026-12-23** |
-> | bpvps2 | user-owned | **2027-01-17** |
->
-> When a key expires the node drops off the tailnet. With port 22 closed to the internet that means
-> **no SSH at all** — recoverable only through Hostinger's browser console. On 2026-12-14 that
-> would hit staging *and both Teeko production hosts at once*.
->
-> Fix in the Tailscale admin console: **Machines → select → ⋯ → Disable key expiry**, on all five.
-> There is no Tailscale API token in `.env`, so this cannot be scripted. (The `TS_OAUTH_*` GitHub
-> org secrets are for the deploy action; GitHub never returns secret values, so they can't be
-> reused here.)
+**Key expiry is DISABLED on all five nodes** (done 2026-08-09, verified: `Self.KeyExpiry` absent on
+every host). This is what makes a tailnet-only SSH policy survivable — before it, vps1/vps2/vps3
+(`tag:server`) were all set to expire **2026-12-14**, bpvps1 `2026-12-23`, bpvps2 `2027-01-17`.
+An expired key drops the node off the tailnet, which with port 22 closed means console-only recovery
+— and 2026-12-14 would have taken staging and both Teeko production hosts on the same day.
 
-> An earlier version of this file claimed VPS1/2/3 were `tag:ci` devices that "do not expire".
-> Both halves were wrong: the tag is `tag:server`, and they carry the **earliest** expiry of the
-> five. Tagged devices only skip expiry when it has been explicitly disabled — the tag alone does
-> not do it. Verify with `Self.KeyExpiry` rather than assuming.
+> A tag does **not** disable expiry on its own; it has to be turned off explicitly per machine.
+> An earlier version of this file claimed VPS1/2/3 were `tag:ci` devices that "do not expire" —
+> wrong on both counts (the tag is `tag:server`, and they held the earliest expiry of the five).
+> Check any new node with `tailscale status --json` → `Self.KeyExpiry`; absent means disabled.
+> There is no Tailscale API token in `.env`, so this is admin-console work: **Machines → select →
+> ⋯ → Disable key expiry**. (The `TS_OAUTH_*` GitHub org secrets belong to the deploy action, and
+> GitHub never returns secret values, so they cannot be reused for this.)
 
-**Port 22 status, verified 2026-08-09** (tested from a laptop *and* server-to-server, since a home
-ISP can produce false negatives):
+**Port 22 is CLOSED to the internet on all five hosts as of 2026-08-09.** SSH is tailnet-only.
+Verified from a laptop *and* server-to-server (a home ISP can produce false negatives, so always
+confirm the second way), with all five still reachable over `100.x` afterwards.
 
-| Host | 22 from the internet |
+| Host | How |
 |---|---|
-| bpvps1, bpvps2 | **closed** — restricted to `100.64.0.0/10` on group 319466, synced |
-| vps2-prod | **closed** — done in hPanel |
-| vps1-staging, vps3-prod | **still OPEN** — edited in hPanel but not yet in effect |
+| bpvps1, bpvps2 | group 319466 rule 22 restricted to `100.64.0.0/10`, then synced (API) |
+| vps1-staging, vps2-prod, vps3-prod | hPanel — different Hostinger account, no API token |
 
-> VPS1/VPS3 almost certainly need the same **sync** step that group 319466 did: an edited firewall
-> is inert until it is pushed to each VM, and hPanel shows the new rule either way. These two live
-> in the Hostinger account we hold no token for, so it cannot be checked or synced via API — it is
-> hPanel-only. Re-test with `/dev/tcp/<ip>/22` from another VPS afterwards.
+> Re-test with `/dev/tcp/<ip>/22` **from another VPS**, not from a laptop. An edited Hostinger
+> firewall is inert until it is synced to each VM, and the panel shows the new rule either way —
+> on 2026-08-09 vps1 and vps3 read OPEN for a while after the rule looked correct.
+
+> **Getting back in if the tailnet is ever unavailable**: Hostinger's browser console (hPanel →
+> VPS → Console). That is now the only path — plan any change that could drop tailscaled with
+> that in mind.
 
 Otherwise open: **80**, **443**. Port **9001** (portainer-agent) is no longer needed — close it.
 
