@@ -134,6 +134,44 @@ SSH key: `~/.ssh/infra_ed25519`. All hosts log in as **`deploy`**, not root — 
 | `staging` | VPS1 | GHA builds image → triggers deploy workflow → SSH deploy |
 | `main` | VPS2 or VPS3 | Same, production tags |
 
+`.github/workflows/deploy-infra.yml` deploys **all five hosts** from one matrix job (was three
+copy-pasted ~120-line jobs). `vps/hosts.json` is the source of truth:
+
+| Field | Meaning |
+|---|---|
+| `key` | also the GitHub Environment name |
+| `dir` | repo path, e.g. `vps/bpvps1` |
+| `env_name` | host default, written as `ENV_NAME` into each stack's `.env` |
+| `exclude` | stacks CI must never touch |
+| `app_stacks` | compose is rsynced, but `docker compose up` belongs to the app's own repo |
+| `fanout` | one repo stack → several host dirs, **each with its own `env_name`** |
+
+**Adding a host**: one entry in `vps/hosts.json` + a GitHub Environment named after its `key`,
+containing at minimum `TAILSCALE_HOST`. Helper scripts: `vps/shared/select-hosts.py` (diff → hosts),
+`vps/shared/expand-targets.py` (stack → `dir|env_name|stack`), `vps/shared/snapshot-host.sh`
+(before/after docker state, for verifying a deploy changed only what you expected).
+
+> **`.env` is MERGED, not replaced.** CI-owned keys (`BASE_DOMAIN`, `ACME_EMAIL`,
+> `CF_DNS_API_TOKEN`, `TRAEFIK_DASHBOARD_AUTH`, `GA4_MCP_PATH_TOKEN`, `ENV_NAME`) win; every other
+> line, comments included, is preserved. This is what lets stacks keep host-managed values such as
+> booking's `BOOKING_HOST`/`IMAGE_TAG`. Before 2026-08-09 it overwrote the file wholesale.
+
+> **`env_name` is per fanout destination, not per host.** bpvps2 deploys one `booking` compose into
+> `booking-staging` and `booking-prod`. A host-level `ENV_NAME` would give both `prod`, making
+> booking-**staging** resolve to booking-prod's container, volume and network — on the instance that
+> holds the real data.
+
+**Currently excluded from CI, and why:**
+
+| Host | Excluded | Reason |
+|---|---|---|
+| bpvps1 | `stalwart`, `traefik`, `wordpress` | dirs are `root:root`; CI connects as `deploy` and rsync fails |
+| bpvps2 | `stalwart` | holds hand-managed mail secrets with no CI case arm |
+| VPS1, VPS2 | `website` | deployed by their own repo's CI |
+
+> A stack dir must be owned by **`deploy`** for CI to deploy it. `vps1-staging/tools` was `root:root`
+> until 2026-08-09 and silently failed at rsync; it was chowned. Check ownership before onboarding.
+
 ## Stack Layout
 
 Each VPS uses: `vps/<alias>/stacks/<stack>/docker-compose.yml`
