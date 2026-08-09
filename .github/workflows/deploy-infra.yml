@@ -1,33 +1,32 @@
 name: Deploy Infrastructure Stacks
 
-# Repo is source of truth for all stacks.
+# Repo is source of truth for all stacks, on ALL hosts listed in vps/hosts.json.
 # On push to main:
-#   - Stack folder present + changed  → deploy / update on VPS
-#   - Stack folder deleted from repo  → docker compose down + remove from VPS
+#   - Stack folder present + changed  → deploy / update on the host
+#   - Stack folder deleted from repo  → docker compose down + remove from the host
 #
-# Excluded from automation (managed by their own repo CI/CD):
-#   VPS1: website
-#   VPS2: website
-#   VPS3: (nothing excluded)
+# Per-host behaviour lives in vps/hosts.json, not here:
+#   exclude     stacks skipped entirely (managed by their own repo CI/CD)
+#   app_stacks  compose is rsynced, but `docker compose up` is the app repo's job
+#   fanout      one repo stack dir → several host stack dirs (bpvps2's booking)
 #
-# Secrets live in GitHub Environments: vps1-staging, vps2-prod, vps3-prod
+# Each host needs a GitHub Environment named after its `key`, holding at minimum
+# TAILSCALE_HOST. BASE_DOMAIN / ACME_EMAIL / CF_DNS_API_TOKEN are org-level;
+# override them per Environment where a host differs (bpvps1 → kaiteki.my).
 
 on:
   push:
     branches: [main]
     paths:
-      - 'vps/vps1-staging/**'
-      - 'vps/vps2-prod/**'
-      - 'vps/vps3-prod/**'
+      - 'vps/**'
+      - '.github/workflows/deploy-infra.yml'
 
 jobs:
-  # ── Detect which VPS directories changed ─────────────────────────────────────
+  # ── Map changed paths → host entries from vps/hosts.json ─────────────────────
   detect:
     runs-on: ubuntu-latest
     outputs:
-      vps1: ${{ steps.out.outputs.vps1 }}
-      vps2: ${{ steps.out.outputs.vps2 }}
-      vps3: ${{ steps.out.outputs.vps3 }}
+      hosts: ${{ steps.out.outputs.hosts }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -41,9 +40,17 @@ jobs:
           else
             DIFF=$(git diff --name-only "$BEFORE" "$SHA")
           fi
-          echo "vps1=$(echo "$DIFF" | grep -qE '^vps/vps1-staging/' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "vps2=$(echo "$DIFF" | grep -qE '^vps/vps2-prod/'    && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "vps3=$(echo "$DIFF" | grep -qE '^vps/vps3-prod/'    && echo true || echo false)" >> $GITHUB_OUTPUT
+          printf '%s\n' "$DIFF" > /tmp/diff.txt
+          HOSTS=$(python3 - <<'PY'
+import json
+hosts = json.load(open('vps/hosts.json'))
+changed = {l.strip() for l in open('/tmp/diff.txt') if l.strip()}
+sel = [h for h in hosts if any(c.startswith(h['dir'] + '/') for c in changed)]
+print(json.dumps(sel, separators=(',', ':')))
+PY
+)
+          echo "hosts=$HOSTS" >> $GITHUB_OUTPUT
+          echo "Selected: $HOSTS"
 
   # ── VPS1 Staging ─────────────────────────────────────────────────────────────
   deploy-vps1:
