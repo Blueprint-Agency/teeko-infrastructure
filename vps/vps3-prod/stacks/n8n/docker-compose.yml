@@ -21,8 +21,13 @@ services:
       - proxy
 
   # NOTE: service named 'db-n8n' so n8n-prod can reach it as DB_POSTGRESDB_HOST=db-n8n
+  # ⚠️ PIN THE MAJOR. This volume holds a PG18 data dir (PGDATA=/var/lib/postgresql/18/docker
+  # — the volume is mounted at the PARENT of PGDATA). `postgres:alpine` floats to the newest
+  # stable major, so leaving it unpinned means the day 19 goes stable a `compose up` starts
+  # PG19 binaries against a PG18 data dir and the container dies with "database files are
+  # incompatible with server". Bumping the major is a deliberate pg_upgrade/dump-restore job.
   db-n8n:
-    image: postgres:alpine
+    image: postgres:18-alpine
     container_name: n8n-db
     restart: unless-stopped
     env_file: .env.db-n8n
@@ -33,7 +38,7 @@ services:
 
   # Postgres for WABA workflow data (users + flight_reminder tables)
   db-waba:
-    image: postgres:alpine
+    image: postgres:18-alpine   # pinned for the same reason as db-n8n above
     container_name: waba-db
     restart: unless-stopped
     env_file: .env.db-waba
