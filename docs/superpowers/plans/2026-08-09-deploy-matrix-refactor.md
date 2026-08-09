@@ -688,6 +688,32 @@ git revert --no-edit -m 1 HEAD && git push
 
 Then re-run Step 3 and confirm the snapshot matches `.before`.
 
+- [ ] **Step 6: Remove the orphaned n8n env files**
+
+Only after Steps 3 and 4 pass. These held real DB credentials and are now unreferenced.
+
+```bash
+ssh bp-vps1-staging 'ls -1 /root/stacks/n8n/.env.n8n /root/stacks/n8n/.env.n8n-dev 2>&1'
+ssh bp-vps3-prod    'ls -1 /root/stacks/n8n/.env.n8n /root/stacks/n8n/.env.n8n-prod 2>&1'
+```
+
+Expected: on each host, `.env.n8n` exists **and** the old file exists. If `.env.n8n` is missing,
+stop — the case arm did not run and the stack is still using the old file.
+
+```bash
+ssh bp-vps1-staging 'rm -f /root/stacks/n8n/.env.n8n-dev'
+ssh bp-vps3-prod    'rm -f /root/stacks/n8n/.env.n8n-prod'
+```
+
+Then confirm n8n is still healthy on both:
+
+```bash
+ssh bp-vps1-staging 'docker inspect n8n-dev  --format "{{.State.Health.Status}}"'
+ssh bp-vps3-prod    'docker inspect n8n-prod --format "{{.State.Health.Status}}"'
+```
+
+Expected: `healthy` on both.
+
 ---
 
 ### Task 9: Onboard bpvps1
