@@ -283,6 +283,22 @@ Each stack dir has its own `.env` (shared vars: `BASE_DOMAIN`, `ACME_EMAIL`) and
 
 Team: `@chriskke` (DevOps lead, sole devops)
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `Blueprint-Agency/teeko-infrastructure`, via `curl` + REST (there is no
+`gh` CLI here). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` at the root, created lazily.
+See `docs/agents/domain.md`.
+
 ## Git Commits
 
 Do NOT add `Co-Authored-By` lines. Claude Code must not be listed as co-author.
