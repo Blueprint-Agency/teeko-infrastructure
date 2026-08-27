@@ -26,46 +26,33 @@ Shared across both, with **no** per-account split:
 | Vercel | one team, `askblueprintagency-7138s-projects` — holds `teeko-ehailing-*` **and** `booking-system-*`, `blueprint-marketing-website`, `vatti-web`, `persistence-chiro` |
 | Tailscale | one tailnet, `taild19da3.ts.net` — all 5 VPS are members |
 
-**MCP servers carry a `-<account>` suffix only where a split actually exists** (Cloudflare,
-Hostinger). `vercel` has no suffix on purpose — suffixing it would imply a boundary that isn't
-there. There is deliberately no generic `cloudflare` server; picking one forces you to pick a side.
-
 > ⚠️ The GitHub PAT can also see **`Inquantum-AI`** — a different client's org. Same hazard as the
 > bare `vps1-staging` / `vps2-prod` SSH aliases. Check the org name before any write via the REST API.
 
 ## MCP Servers
 
-| Server | Account | Purpose |
-|--------|---------|---------|
-| `cloudflare-teeko` | Teeko | DNS + zones for teeko.ai |
-| `n8n-teeko` | Teeko | List/search/execute/create/edit n8n workflows (n8n.teeko.ai) |
-| `cloudflare-blueprint` | Blueprint | DNS + zones for kaiteki.my, blueprintdigital.my, reservetoday.app |
-| `hostinger-vps-blueprint` | Blueprint | VPS firewall, snapshots, reboot/rebuild, metrics, PTR — bpvps1 + bpvps2 |
-| `hostinger-billing-blueprint` | Blueprint | Subscriptions + renewal dates for the two KVM plans |
-| `vercel` | both | Projects, deployments, logs, env vars, domains |
+The configured servers, the account-suffix rule, and the scoped-binary rule all live in
+`.mcp.json.example` (`_comment_*` keys). Read that, not a copy of it.
 
-**Deliberately not MCP servers** — each was evaluated and rejected:
-
-| | Why not |
-|---|---|
-| GitHub | `curl` + REST API with the `.env` PAT already covers repos, secrets, environments. An MCP adds ~90 tools to replace ~4 calls. No `gh` CLI installed either. |
-| Tailscale | No official server exists; the community ones are unsupported (one is reverse-engineered). Joining a host to the tailnet is one `tailscale up --authkey` in a post-install script. |
-| `hostinger-{dns,domains,hosting,mail,reach}` | Both accounts own **zero** registered domains and zero hosting/email subscriptions — these servers would manage nothing. DNS is Cloudflare, mail is self-hosted Stalwart. |
-
-Config in `.mcp.json` (gitignored — contains tokens). Use `.mcp.json.example` as template.
-
-`hostinger-api-mcp` ships one binary per product area — always use the scoped binary, never the
-unified `hostinger-api-mcp` (314 tools). Add an area only when that account owns resources of that
-type; verify first with a curl against the matching endpoint rather than assuming.
+**Deliberately not MCP servers.** **GitHub** — `curl` + REST with the `.env` PAT covers repos,
+secrets and environments in ~4 calls; an MCP adds ~90 tools. **Tailscale** — no official server
+exists and the community ones are unsupported. **`hostinger-{dns,domains,hosting,mail,reach}`** —
+both accounts own zero registered domains and zero hosting/mail subscriptions, so these would
+manage nothing. DNS is Cloudflare, mail is self-hosted Stalwart.
 
 > ⚠️ **VPS1/2/3 are in no Hostinger account we hold a token for — parked, not solved.** Verified
-> 2026-08-09: the Teeko token authenticates fine (`/vps/v1/data-centers` returns 9; a bogus token
-> 401s) but `/vps/v1/virtual-machines`, `/domains/v1/portfolio` and `/billing/v1/subscriptions` all
-> return **empty**. The Blueprint token sees only bpvps1 + bpvps2. So `72.61.114.7`,
-> `72.60.235.226`, `72.62.74.77` live under a **third login**. The token is parked in `.env` as
-> `HOSTINGER_TEEKO_API_TOKEN`; **no `hostinger-*-teeko` server is configured**, because one would
-> answer "VPS not found" instead of failing loudly. VPS1/2/3 firewalls and snapshots stay
-> hPanel-only until the right account is found.
+> 2026-08-09: the Teeko token authenticated (`/vps/v1/data-centers` returned 9; a bogus token 401s)
+> but `/vps/v1/virtual-machines`, `/domains/v1/portfolio` and `/billing/v1/subscriptions` all
+> returned **empty**. The Blueprint token sees only bpvps1 + bpvps2. So `72.61.114.7`,
+> `72.60.235.226`, `72.62.74.77` live under a **third login**. **No `hostinger-*-teeko` server is
+> configured**, because one would answer "VPS not found" instead of failing loudly. VPS1/2/3
+> firewalls and snapshots stay hPanel-only until the right account is found.
+
+> The Teeko token itself was **removed from `.env` on 2026-08-27** and should be revoked in
+> hPanel. Nothing read it — no MCP server, no script, no workflow — so it was a live credential
+> guarding nothing. If the third login is ever found, generate a **fresh** token there; do not go
+> looking for this one. (Hostinger's API sits behind Cloudflare and 403s `error code: 1010` on a
+> bare urllib request — send a normal `User-Agent`, or a live token looks dead.)
 
 **GitHub**: use `git` (bash) for repo operations and `curl` + GitHub REST API for org/repo
 management, secrets, and environments. PAT in `.env` as `GITHUB_PERSONAL_ACCESS_TOKEN`.
@@ -100,28 +87,37 @@ SSH key: `~/.ssh/infra_ed25519`. All hosts log in as **`deploy`**, not root — 
 
 ## What's Running
 
-**VPS1 — Staging**: `traefik`, `website` (staging.teeko.ai), `n8n` (stagingn8n.teeko.ai), `tools` (drizzle-gateway at stagingpg.teeko.ai)
+Per-host stack list is `ls vps/<host>/stacks/`; container names and domains are in each stack's
+compose labels; the app → VPS → image → domain mapping is `apps/registry.yml`. bpvps2 is the one
+host whose on-host dirs differ from the repo: a single `booking` stack fans out to
+`booking-staging` + `booking-prod` per `vps/hosts.json`.
 
-**VPS2 — Production**: `traefik`, `website` (teeko.ai), `tools` (drizzle-gateway at pg.teeko.ai)
+> `docs/running-services.md` is a **2026-07-21 snapshot and is now stale** (it still places booking
+> on VPS3 and predates bpvps2). Treat it as history, not as inventory.
 
-**VPS3 — Production**: `traefik`, `n8n` (n8n.teeko.ai), `tools` (drizzle-gateway at pg3.teeko.ai), `ga4-mcp`, `gsc-mcp`, `ehailing`
+Four things the compose files will not tell you — all of them "do not prune":
 
 > The `n8n` stack on VPS3 carries **three** containers, not two: `n8n-prod`, `n8n-db`, and
 > `waba-db` (service `db-waba`, `postgres:alpine`). `waba-db` is a separate database that happens to
-> live in the n8n compose — don't read it as an orphan and prune it.
+> live in the n8n compose, with no app container running against it — don't read it as an orphan.
 
-**BPVPS1 — Kaiteki**: `traefik`, `kaiteki`, `kaiteki-staging`, `stalwart` (+`bulwark`), `wordpress` (+`wp-db`)
+> **ga4-mcp / gsc-mcp stacks**: each is 3 containers (`*-mcp` backend, `*-gateway` OAuth 2.1 front,
+> `*-dex` IdP) and **all three are required** to serve `https://ga4.teeko.ai/mcp` and
+> `https://gsc.teeko.ai/mcp`. The `*-mcp` backends have no public route. None are redundant.
 
-**BPVPS2 — Booking**: `traefik`, `booking-staging` (bookingapi.teeko.ai — carries the real data), `booking-prod` (prodbookingapi.teeko.ai — fresh). Both from one parameterized compose in `vps/bpvps2/stacks/booking/`, deployed to two dirs; `ENV_NAME` keys the container names, volume, network and Traefik router so they can't collide.
+> **`booking-staging` (bookingapi.teeko.ai) carries the real data**; `booking-prod`
+> (prodbookingapi.teeko.ai) is fresh. The names read backwards because staging was the only
+> instance until the 2026-07-21 split. Swap the domains at real prod launch, and repoint the
+> Clerk/Stripe webhooks when you do.
 
-> **Portainer and pgAdmin are gone** (removed 2026-07-21) — no container UI at all. Use `ssh bp-vps<n>-*` + `docker` directly. Postgres is managed via drizzle-gateway, now on all 3 Teeko VPS (`stagingpg` / `pg` / `pg3`.teeko.ai), all sharing the `GATEWAY_MASTERPASS` secret.
-
-> **ga4-mcp / gsc-mcp stacks**: each is 3 containers (`*-mcp` backend, `*-gateway` OAuth 2.1 front, `*-dex` IdP) and **all three are required** to serve `https://ga4.teeko.ai/mcp` and `https://gsc.teeko.ai/mcp`. None are redundant — do not prune them.
+> **Portainer and pgAdmin are gone** (removed 2026-07-21) — no container UI at all. Postgres is
+> managed via drizzle-gateway on all 3 Teeko VPS (`stagingpg` / `pg` / `pg3`.teeko.ai), all sharing
+> the `GATEWAY_MASTERPASS` secret.
 
 ## Architecture
 
-- 5 Hostinger VPS across two accounts, Docker Compose, no Kubernetes
-- Reverse proxy: Traefik on all VPS (Let's Encrypt via Cloudflare DNS-01), ports 80→443
+Topology, registry and database choices are in `README.md`; per-app detail is `apps/registry.yml`.
+Timezone: **Asia/Kuala_Lumpur**.
 
 > ⚠️ **A Cloudflare token cannot span accounts, and Traefik reads `CF_DNS_API_TOKEN`
 > process-wide.** bpvps2's token is a **Teeko** token (teeko.ai only), so DNS-01 there cannot
@@ -132,67 +128,35 @@ SSH key: `~/.ssh/infra_ed25519`. All hosts log in as **`deploy`**, not root — 
 > stacks. It requires the record to be **DNS-only** — a Cloudflare-proxied (orange) host
 > terminates TLS at the edge and the challenge never lands — and it cannot issue wildcards.
 > Keep `letsencrypt` (DNS-01) for teeko.ai and for any wildcard.
-- Container registry: DockerHub — `blueprintagency/<app>:<tag>`
-- Databases: local PostgreSQL per app (migrating to Supabase); n8n keeps local Postgres
-- External: Supabase, Auth0, Stripe
-- Timezone: Asia/Kuala_Lumpur
 
 ## CI/CD
 
-| Branch | Target | Flow |
-|--------|--------|------|
-| `staging` | VPS1 | GHA builds image → triggers deploy workflow → SSH deploy |
-| `main` | VPS2 or VPS3 | Same, production tags |
+`.github/workflows/deploy-infra.yml` deploys **all five hosts** from one matrix job.
+`vps/hosts.json` is the source of truth and documents its own fields inline. The ordered procedure
+for onboarding a host or adding a stack is the **`provision` skill**
+(`.claude/skills/provision/SKILL.md`) — read that rather than a summary here.
 
-`.github/workflows/deploy-infra.yml` deploys **all five hosts** from one matrix job (was three
-copy-pasted ~120-line jobs). `vps/hosts.json` is the source of truth:
-
-| Field | Meaning |
-|---|---|
-| `key` | also the GitHub Environment name |
-| `dir` | repo path, e.g. `vps/bpvps1` |
-| `env_name` | host default, written as `ENV_NAME` into each stack's `.env` |
-| `exclude` | stacks CI must never touch |
-| `app_stacks` | compose is rsynced, but `docker compose up` belongs to the app's own repo |
-| `fanout` | one repo stack → several host dirs, **each with its own `env_name`** |
-
-**Adding a host**: one entry in `vps/hosts.json` + a GitHub Environment named after its `key`,
-containing at minimum `TAILSCALE_HOST`. Helper scripts: `vps/shared/select-hosts.py` (diff → hosts),
-`vps/shared/expand-targets.py` (stack → `dir|env_name|stack`), `vps/shared/render-ci.py`
-(stack `ci/` templates → rendered files), `vps/shared/snapshot-host.sh` (before/after docker state,
-for verifying a deploy changed only what you expected).
+`staging` branch → VPS1; `main` → VPS2 or VPS3. App images are built by each app's own repo, which
+then triggers the deploy.
 
 ### Per-stack secrets live in `ci/`, never in the workflow
 
 **`deploy-infra.yml` knows nothing about any individual stack.** A stack that needs generated files
-carries them itself, in `vps/<host>/stacks/<stack>/ci/`, as templates with `@@MARKER@@` placeholders.
-`render-ci.py` fills each marker from the same-named env var in the deploy step and rsyncs the result.
-
-| Path under `ci/` | Lands on the host as | Notes |
-|---|---|---|
-| `.env.n8n`, `gateway-config.yaml`, … | `/root/stacks/<dir>/<same path>` | overwritten every deploy |
-| `credentials/sa-key.json` | `/root/stacks/<dir>/credentials/sa-key.json` | subdirs are preserved |
-| `env.ci` | merged **into** `.env` | for keys the stack's own compose interpolates |
-| `post-sync.sh` | run in the stack dir before `docker compose up` | the `mkdir`/`chmod`/`chown` a stack needs |
-
-**Adding a stack that needs a secret**: add the template under `ci/`, add the secret to the deploy
-step's `env:` block, add it to the host's GitHub Environment. Never add a branch to the workflow.
+carries them itself in `vps/<host>/stacks/<stack>/ci/`, as templates with `@@MARKER@@` placeholders;
+`render-ci.py` fills each marker from the same-named env var in the deploy step and rsyncs the
+result. The `provision` skill has the path-by-path contract. **Never add a branch to the workflow.**
 
 > An unset or empty marker **fails the deploy**. This is deliberate: a blank secret is not a smaller
 > failure than a missing file — it is a Dex with no admin password that starts happily and serves
 > 401s, or a Postgres that initialises a brand new empty database. `render-ci.py` names the variable
 > and the file and exits 1. `vps/shared/test_render_ci.py` covers this and runs as a CI step.
 
-> Until 2026-08-09 all of this was a `case $stack in` block plus ~30 `printf | base64` lines inside
-> the workflow's remote-shell string. That coupling is why `stalwart` was excluded ("no CI case
-> arm") and why `.env.db-waba` is still host-only — onboarding a stack meant editing YAML-inside-
-> shell-inside-ssh. The rendered output is byte-identical to what that block produced.
-
 > **`.env` is MERGED, not replaced.** CI-owned keys (`BASE_DOMAIN`, `ACME_EMAIL`,
 > `CF_DNS_API_TOKEN`, `TRAEFIK_DASHBOARD_AUTH`, `ENV_NAME`, plus whatever the stack's own `ci/env.ci`
 > contributes) win; every other line, comments included, is preserved. This is what lets stacks keep
-> host-managed values such as booking's `BOOKING_HOST`/`IMAGE_TAG`. Before 2026-08-09 it overwrote
-> the file wholesale.
+> host-managed values such as booking's `BOOKING_HOST`/`IMAGE_TAG`. App repo deploys are compatible
+> with this: `booking-system` rewrites its own keys idempotently, and `ehailing` / `kaiteki-web`
+> write only their own `.env.*` files, which CI's rsync excludes.
 
 > `GA4_MCP_PATH_TOKEN` left the host-wide key list on 2026-08-09 and moved to
 > `ga4-mcp/ci/env.ci`, where it belongs — only ga4-mcp's compose reads it, but it was previously
@@ -204,13 +168,14 @@ step's `env:` block, add it to the host's GitHub Environment. Never add a branch
 > booking-**staging** resolve to booking-prod's container, volume and network — on the instance that
 > holds the real data.
 
+> A stack dir must be owned by **`deploy`** for CI to deploy it — `root:root` fails silently at
+> rsync. That is why bpvps1's `stalwart` / `traefik` / `wordpress` are still in `exclude` in
+> `vps/hosts.json`, which records the reason per host. Check ownership before onboarding.
+
 ### ⚠️ Org-level vars are consumed by OTHER repos — check before deleting one
 
-`deploy-infra.yml` reads only `vars.TAILSCALE_HOST` (per-Environment). Every `VPS*_HOST` /
-`*_TAILSCALE_HOST` org variable exists for a **different repo's** deploy workflow:
-
-The org holds exactly **8** variables. Five (`VPS{1,2,3}_HOST`, `BPVPS1`, `BPVPS2` — the public IPs)
-were deleted on 2026-08-09 once every deploy path had moved to the tailnet.
+`deploy-infra.yml` reads only `vars.TAILSCALE_HOST` (per-Environment). Every other `*_TAILSCALE_HOST`
+org variable exists for a **different repo's** deploy workflow. The org holds exactly **8**:
 
 | Org variable | Consumed by |
 |---|---|
@@ -222,8 +187,7 @@ were deleted on 2026-08-09 once every deploy path had moved to the tailnet.
 
 > **The GitHub code-search API does not index these workflow files.** A `/search/code?q=VPS1_HOST`
 > returns `total_count: 0` for names that are demonstrably in use. On 2026-08-09 that false
-> negative got `VPS1_HOST` deleted while `teeko-website` still needed it; it was restored within
-> the hour, and deleted again only after that repo moved to Tailscale. **Verify by reading
+> negative got `VPS1_HOST` deleted while `teeko-website` still needed it. **Verify by reading
 > `.github/workflows/` from each repo's contents API**, never by code search.
 
 > **Strip comments before deciding a variable is unused.** `teeko-ehailing` carries the line
@@ -231,73 +195,21 @@ were deleted on 2026-08-09 once every deploy path had moved to the tailnet.
 > `vars\.([A-Z_]+)` match reads that as a live reference and keeps a dead variable alive forever.
 > The comment is accurate history — leave it; just don't count it.
 
-> **All five deploy paths reach the VPS over Tailscale, verified end to end on 2026-08-09** by
-> dispatching every workflow and confirming success: `teeko-website` BE+FE on **both** `staging`
-> (VPS1) and `main` (VPS2, teeko.ai — containers restarted, site 200), `kaiteki-web` staging+prod,
-> `booking-system` on `main`, `teeko-ehailing` on `staging`. Only after that were the public-IP
-> variables removed.
-
-> `booking-system`'s deploy runs `db:migrate && db:seed`. **`booking-staging` carries the real
-> data** (`bookingapi.teeko.ai`), `booking-prod` is fresh — so exercise the deploy on `main`, not
-> `staging`. Verified 2026-08-09: prod redeployed, staging's 3 bookings untouched.
+> `booking-system`'s deploy runs `db:migrate && db:seed`, and **`booking-staging` carries the real
+> data** — so exercise that deploy on `main`, not `staging`.
 
 > **Seven secrets referenced by app workflows do not exist anywhere** (checked repo-level, and every
-> environment, as both secret and variable). These predate the 2026-08-09 CI work and are unrelated
-> to it, but each one is silently written as an empty value into the app's `.env`:
-> `booking-system` → `R2_ACCESS_KEY_ID`, `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL`,
-> `R2_SECRET_ACCESS_KEY` (object storage — uploads);
+> environment, as both secret and variable). Each is silently written as an empty value into the
+> app's `.env`: `booking-system` → `R2_ACCESS_KEY_ID`, `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`,
+> `R2_PUBLIC_URL`, `R2_SECRET_ACCESS_KEY` (object storage — uploads);
 > `teeko-ehailing` → `CLERK_DRIVER_WEBHOOK_SIGNING_SECRET`, `CLERK_RIDER_WEBHOOK_SIGNING_SECRET`
 > (webhook signature verification).
 
-**App repo deploys are compatible with the `.env` merge** — no changes needed there.
-`booking-system` rewrites its keys idempotently (`sed -i "/^${k}=/d"` then append), which is the
-same key-level merge CI does, so neither clobbers the other. `ehailing` and `kaiteki-web` write
-only their own `.env.*` files, which CI's rsync excludes.
-
-**Currently excluded from CI, and why:**
-
-| Host | Excluded | Reason |
-|---|---|---|
-| bpvps1 | `stalwart`, `traefik`, `wordpress` | dirs are `root:root`; CI connects as `deploy` and rsync fails |
-| bpvps2 | `stalwart` | hand-managed mail secrets; now onboardable via `ci/` — needs the secrets adding to the Environment first |
-| VPS1, VPS2 | `website` | deployed by their own repo's CI |
-
-> A stack dir must be owned by **`deploy`** for CI to deploy it. `vps1-staging/tools` was `root:root`
-> until 2026-08-09 and silently failed at rsync; it was chowned. Check ownership before onboarding.
-
-## Stack Layout
-
-Each VPS uses: `vps/<alias>/stacks/<stack>/docker-compose.yml`
-On VPS: `/root/stacks/<stack>/` (e.g. `cd /root/stacks/website && docker compose up -d`)
-
-Each stack dir has its own `.env` (shared vars: `BASE_DOMAIN`, `ACME_EMAIL`) and per-service `.env.*` files.
-
-## Key Files
-
-- `apps/registry.yml` — app-to-VPS mapping, images, ports, domains
-- `.env.example` — credentials template
-
-## GitHub Org
-
-**Blueprint-Agency** — `https://github.com/Blueprint-Agency`
-
-Team: `@chriskke` (DevOps lead, sole devops)
-
 ## Agent skills
 
-### Issue tracker
-
-GitHub Issues on `Blueprint-Agency/teeko-infrastructure`, via `curl` + REST (there is no
-`gh` CLI here). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical roles, unchanged. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context — `CONTEXT.md` + `docs/adr/` at the root, created lazily.
-See `docs/agents/domain.md`.
+`docs/agents/issue-tracker.md` — GitHub Issues on `Blueprint-Agency/teeko-infrastructure`, via
+`curl` + REST. `docs/agents/triage-labels.md` — the five canonical roles.
+`docs/agents/domain.md` — single-context `CONTEXT.md` + `docs/adr/` at the root, created lazily.
 
 ## Git Commits
 
@@ -305,92 +217,62 @@ Do NOT add `Co-Authored-By` lines. Claude Code must not be listed as co-author.
 
 ## Operational Notes
 
-### Adding a New App
-1. Update `apps/registry.yml`
-2. Update target VPS stack compose file
-3. Add GitHub environment secrets: `VPS_HOST`, `SSH_PRIVATE_KEY`, `DOCKERHUB_TOKEN`, plus any app-specific vars
-
-### Deploy / Rollback
-```bash
-# Manual deploy on VPS
-cd /root/stacks/<stack> && docker compose pull <service> && docker compose up -d <service>
-
-# Rollback — pin to known-good tag in docker-compose.yml, then:
-docker compose pull <service> && docker compose up -d <service>
-
-# Verify after rollback
-docker compose ps
-docker compose logs -f <service>
-```
-
 ### Firewall (Hostinger VPS panel)
-> ⚠️ **The `hostinger-vps` MCP token only covers bpvps1 + bpvps2.** The teeko.ai VPS1/2/3 live in a
-> **different Hostinger account** — their firewalls are still hPanel-only until a token is generated
-> there too. Verified 2026-08-09: `GET /vps/v1/virtual-machines` returns exactly those two hosts.
-
-For bpvps1/bpvps2: both share **one** firewall group, `319466` ("default") — editing it hits *both*
-hosts. Rules are per-group and must be re-synced onto each VPS after editing; check `is_synced`,
-because an edited-but-unsynced group silently keeps the old rules.
-Current 319466 rules: **25, 80, 443, 465, 587, 993, 995** `accept TCP` from any, plus **22**
-`accept TCP` from **`100.64.0.0/10` only** (the Tailscale CGNAT range) as of 2026-08-09.
-
-**Port 22 on bpvps1 + bpvps2 is closed to the internet as of 2026-08-09.** Rule 22 was
-**restricted rather than deleted** — reversible, self-documenting, and the tailnet source keeps a
-way in without recreating a rule. Verified after sync: TCP 22 refused on both public IPs, SSH over
-`100.x` working, 443 and all mail ports unaffected, kaiteki + booking serving 200.
-
-> Syncing **one** VM applied the group to **both** — expected, since 319466 is shared. The sync
-> action sits in state `started` for ~100s before `success`; the rules do **not** take effect until
-> then. Poll `/virtual-machines/<id>/actions/<actionId>` rather than trusting the group's
-> `is_synced` flag, which flips to `true` while the action is still running.
-
-> Testing ports from a laptop is unreliable: home ISPs block outbound **25**, so it reads BLOCKED
-> even when open. Test server-to-server (`ssh bp-vps3-prod` → `/dev/tcp/<ip>/<port>`). Port **587**
-> reads BLOCKED because nothing listens on it, not because of the firewall.
-
-**Key expiry is DISABLED on all five nodes** (done 2026-08-09, verified: `Self.KeyExpiry` absent on
-every host). This is what makes a tailnet-only SSH policy survivable — before it, vps1/vps2/vps3
-(`tag:server`) were all set to expire **2026-12-14**, bpvps1 `2026-12-23`, bpvps2 `2027-01-17`.
-An expired key drops the node off the tailnet, which with port 22 closed means console-only recovery
-— and 2026-12-14 would have taken staging and both Teeko production hosts on the same day.
-
-> A tag does **not** disable expiry on its own; it has to be turned off explicitly per machine.
-> An earlier version of this file claimed VPS1/2/3 were `tag:ci` devices that "do not expire" —
-> wrong on both counts (the tag is `tag:server`, and they held the earliest expiry of the five).
-> Check any new node with `tailscale status --json` → `Self.KeyExpiry`; absent means disabled.
-> There is no Tailscale API token in `.env`, so this is admin-console work: **Machines → select →
-> ⋯ → Disable key expiry**. (The `TS_OAUTH_*` GitHub org secrets belong to the deploy action, and
-> GitHub never returns secret values, so they cannot be reused for this.)
 
 **Port 22 is CLOSED to the internet on all five hosts as of 2026-08-09.** SSH is tailnet-only.
-Verified from a laptop *and* server-to-server (a home ISP can produce false negatives, so always
-confirm the second way), with all five still reachable over `100.x` afterwards.
+Otherwise open: **80**, **443**. Close everything else — especially 3000, 5432, 5678, 8080, 9090
+(reached via Traefik only) and 9001 (portainer-agent, no longer needed).
 
 | Host | How |
 |---|---|
 | bpvps1, bpvps2 | group 319466 rule 22 restricted to `100.64.0.0/10`, then synced (API) |
 | vps1-staging, vps2-prod, vps3-prod | hPanel — different Hostinger account, no API token |
 
-> Re-test with `/dev/tcp/<ip>/22` **from another VPS**, not from a laptop. An edited Hostinger
-> firewall is inert until it is synced to each VM, and the panel shows the new rule either way —
-> on 2026-08-09 vps1 and vps3 read OPEN for a while after the rule looked correct.
+Current 319466 rules: **25, 80, 443, 465, 587, 993, 995** `accept TCP` from any, plus **22**
+`accept TCP` from **`100.64.0.0/10` only** (the Tailscale CGNAT range). Rule 22 was **restricted
+rather than deleted** — reversible, self-documenting, and the tailnet source keeps a way in
+without recreating a rule.
+
+> bpvps1 and bpvps2 **share** group `319466` — editing it hits both, and syncing one VM applies it
+> to both. The sync action sits in state `started` for ~100s; the rules do **not** take effect until
+> it reaches `success`. Poll `/virtual-machines/<id>/actions/<actionId>` rather than trusting the
+> group's `is_synced` flag, which flips to `true` while the action is still running.
+
+> Testing ports from a laptop is unreliable: home ISPs block outbound **25**, so it reads BLOCKED
+> even when open, and an unsynced firewall reads OPEN long after the rule looks right. Re-test
+> server-to-server (`ssh bp-vps3-prod` → `/dev/tcp/<ip>/<port>`). Port **587** reads BLOCKED
+> because nothing listens on it, not because of the firewall.
+
+**Key expiry is DISABLED on all five nodes** (2026-08-09, verified: `Self.KeyExpiry` absent on
+every host). This is what makes a tailnet-only SSH policy survivable — before it, vps1/vps2/vps3
+were all set to expire **2026-12-14**, which would have taken staging and both Teeko production
+hosts on the same day. An expired key drops the node off the tailnet, which with port 22 closed
+means console-only recovery.
+
+> A tag does **not** disable expiry on its own; it has to be turned off explicitly per machine.
+> Check any new node with `tailscale status --json` → `Self.KeyExpiry`; absent means disabled.
+> There is no Tailscale API token in `.env`, so this is admin-console work: **Machines → select →
+> ⋯ → Disable key expiry**. (The `TS_OAUTH_*` GitHub org secrets belong to the deploy action, and
+> GitHub never returns secret values, so they cannot be reused for this.)
 
 > **Getting back in if the tailnet is ever unavailable**: Hostinger's browser console (hPanel →
 > VPS → Console). That is now the only path — plan any change that could drop tailscaled with
 > that in mind.
 
-Otherwise open: **80**, **443**. Port **9001** (portainer-agent) is no longer needed — close it.
+> ⚠️ **We hold a console credential for bpvps1 only.** The console wants an OS login, and
+> `PasswordAuthentication no` is set on all five hosts (verified 2026-08-27), so SSH passwords are
+> useless anyway — the console is the only thing a password is still for. `.env` keeps
+> `BPVPS1_USER`/`BPVPS1_PASSWORD` (root) for exactly that. The four `deploy` passwords that used to
+> sit beside them were deleted on 2026-08-27: `deploy` has no sudo, so even a working console login
+> as `deploy` could not fix a daemon. If you want real break-glass on vps1/vps2/vps3/bpvps2, set a
+> root password on each (hPanel → VPS → Root password) and store it as `<HOST>_ROOT_PASSWORD`.
 
-Close everything else — especially 3000, 5432, 5678, 8080, 9090 (all accessed via Traefik only)
-
-> `/root/stacks/_preflight_20260809/` (pre-refactor env backups + n8n dumps) was **deleted from all
-> hosts on 2026-08-09**, once every deploy path had been verified. Two of the six dirs were nested
-> *inside* a stack (`/root/stacks/n8n/_preflight_20260809/`, holding a 297 MB `n8n.sql`), so a check
-> of `/root/stacks/_preflight_*` alone reported "absent" on VPS3 while 284 MB sat one level down.
-> Search with `find /root/stacks -type d -name "_preflight_*"`. Note `deploy` cannot enumerate
-> `/root` (mode `drwx--x--x`) — a `find /` as `deploy` silently returns nothing.
+> `deploy` cannot enumerate `/root` (mode `drwx--x--x`) — a `find /` as `deploy` silently returns
+> nothing. Search host paths as root, and search recursively: the 2026-08-09 `_preflight_*` cleanup
+> first reported "absent" on VPS3 while 284 MB sat nested one level down inside a stack dir.
 
 ### Docker 29.x breaks Traefik's Docker provider — fix differs per VPS
+
 Docker 29.x raises `MinAPIVersion` above 1.24. Traefik v3.3 **hardcodes** Docker API 1.24 and
 ignores `DOCKER_API_VERSION`, so the daemon rejects it and Traefik loads **zero routes** — every
 domain on that host 404s while the containers stay healthy. The fix is always daemon-side, but
@@ -410,11 +292,6 @@ Contents either way: `[Service]` + `Environment="DOCKER_MIN_API_VERSION=1.24"`, 
 > the unit name. Must reapply if Docker is reinstalled.
 
 ### Shared Scripts
-`vps/shared/` — `select-hosts.py`, `expand-targets.py`, `render-ci.py`, `test_render_ci.py`,
-`snapshot-host.sh`, `setup-vps.sh`.
-`scripts/backup.sh <bp-alias>` tars every named volume on that host into `/home/deploy/backups/`.
 
-> `deploy.sh` and `healthcheck.sh` were **deleted 2026-08-09** — both `cd`'d into `vps/<host>/`,
-> which holds no compose file, and ran `docker compose` on your laptop rather than the VPS. They
-> also named aliases (`prod-vps2`) that never existed. Deploy is `deploy-infra.yml`; health is
-> `snapshot-host.sh`.
+`vps/shared/` holds the CI helpers (see the `provision` skill); `scripts/backup.sh <bp-alias>` tars
+every named volume on that host into `/home/deploy/backups/`.
