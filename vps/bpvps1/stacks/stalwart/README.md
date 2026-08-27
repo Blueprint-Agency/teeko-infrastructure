@@ -92,6 +92,14 @@ PTR (Hostinger hPanel): `187.127.122.41` → **`mail.kaiteki.my`** (FCrDNS / del
   > default pool. Check with `docker network inspect stalwart_mailnet` before trusting it.
   > Bans persist in the store — restarting Stalwart does **not** clear them.
 - Old DKIM verifiers (e.g. port25) can't evaluate Ed25519 → harmless `permerror`; RSA passes.
+- **DNSBLs only work through the local `unbound` container** (added 2026-08-27). Spamhaus/URIBL
+  refuse public+shared resolvers: via the host default, `2.0.0.127.zen.spamhaus.org` (the
+  must-always-list test point) returned NXDOMAIN, so every RBL check silently scored 0 — this is
+  how obvious phish reached inboxes. The `stalwart` service pins `dns: 172.16.3.53` (unbound's
+  static mailnet IP). If unbound is down Stalwart has **no outbound DNS at all** (delivery pauses
+  and retries) — check `docker ps` for `unbound` before debugging "DNS is broken" inside Stalwart.
+  Re-test with: `docker run --rm --network stalwart_mailnet --dns 172.16.3.53 alpine nslookup
+  2.0.0.127.zen.spamhaus.org` → must return `127.0.0.2/4/10`.
 
 ## Ops
 ```bash

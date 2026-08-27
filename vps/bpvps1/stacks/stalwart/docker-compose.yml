@@ -42,8 +42,26 @@ services:
       - stalwart-data:/opt/stalwart
       - ./certs:/opt/stalwart/certs:ro            # LE cert from acme.sh (chown 2000:2000 to read)
       - ./config.json:/etc/stalwart/config.json   # storage pointer — persistence-critical
+    dns:
+      - 172.16.3.53   # unbound (below): Spamhaus/URIBL refuse public+shared resolvers
+    depends_on:
+      - unbound
     networks:
       - mailnet
+
+  # Local recursive DNS resolver — DNSBL lookups only work through it. Spamhaus (and
+  # URIBL/SURBL) refuse queries arriving via public/shared resolvers: through the host
+  # default, the test point 2.0.0.127.zen.spamhaus.org returned NXDOMAIN (verified
+  # 2026-08-27), i.e. every RBL check silently scored 0. Stalwart's embedded-DNS
+  # forwarder points here via `dns:` above. If unbound is down, Stalwart loses outbound
+  # DNS entirely (delivery queues + retries; inbound senders retry) — keep it running.
+  unbound:
+    image: klutchell/unbound:latest
+    container_name: unbound
+    restart: unless-stopped
+    networks:
+      mailnet:
+        ipv4_address: 172.16.3.53   # static: `dns:` needs an IP; mailnet is 172.16.3.0/24
 
   # Bulwark — modern JMAP webmail built for Stalwart (HTML compose, themes, calendar,
   # contacts, built-in admin dashboard). Login with mailbox creds (e.g. admin@kaiteki.my).
