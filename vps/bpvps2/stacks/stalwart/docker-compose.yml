@@ -47,8 +47,25 @@ services:
       - stalwart-data:/opt/stalwart
       - ./certs:/opt/stalwart/certs:ro            # LE cert from acme.sh (chown 2000:2000 to read)
       - ./config.json:/etc/stalwart/config.json   # storage pointer — persistence-critical
+    dns:
+      - 172.21.0.53   # unbound (below): Spamhaus/URIBL refuse public+shared resolvers
+    depends_on:
+      - unbound
     networks:
       - mailnet
+
+  # Local recursive DNS resolver — DNSBL lookups only work reliably through it. Spamhaus
+  # (and URIBL/SURBL) refuse queries arriving via public/shared resolvers and answer with a
+  # sentinel that Stalwart scores 0.0, i.e. every RBL check silently does nothing. Same fix
+  # as bpvps1 (2026-08-27), which is where it was caught.
+  # ⚠️ IP differs per host: bpvps1's mailnet is 172.16.3.0/24, THIS host is 172.21.0.0/16.
+  unbound:
+    image: klutchell/unbound:latest
+    container_name: unbound
+    restart: unless-stopped
+    networks:
+      mailnet:
+        ipv4_address: 172.21.0.53   # static: `dns:` needs an IP; mailnet is 172.21.0.0/16
 
   # Bulwark — modern JMAP webmail built for Stalwart (HTML compose, themes, calendar,
   # contacts, built-in admin dashboard). Login with mailbox creds.

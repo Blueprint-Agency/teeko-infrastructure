@@ -73,6 +73,22 @@ docker compose up -d stalwart
 
 ## ⚠️ Gotchas / landmines
 Same set as bpvps1 — most importantly:
+- ⚠️ **The MX record above did not exist until 2026-08-28.** This table documented it from day
+  one, but it was never created in Cloudflare, so for three weeks **no external mail could be
+  delivered at all**. With no MX, senders fall back to the apex A record — which is **Vercel** —
+  and Gmail tempfailed for 48h against a web server before giving up ("Delivery incomplete… will
+  retry"). Nothing appeared in Stalwart because mail never reached this host. **A direct
+  `nc <ip> 25` test hides this bug** — it skips the MX lookup and succeeds. Always verify with
+  `dig +short MX <domain>`, and test delivery through the resolved MX host, not the raw IP.
+- ⚠️ **Stalwart writes no logs on this host** (zero lines since first boot 2026-08-06). Because
+  `config.json` is bind-mounted from the start, Stalwart skips its installer, which is also what
+  normally configures the console tracer — so `docker logs stalwart` is empty and **greps against
+  it prove nothing**. Enable a console tracer in the admin UI (Settings → Telemetry → Tracing)
+  before trying to diagnose anything here. bpvps1 logs normally; this host does not.
+- **DNSBLs need the local `unbound` container** (added 2026-08-28, same as bpvps1). Stalwart pins
+  `dns: 172.21.0.53`. If unbound is down, Stalwart has no outbound DNS at all. Verify with
+  `docker run --rm --network stalwart_mailnet --dns 172.21.0.53 alpine nslookup
+  2.0.0.127.zen.spamhaus.org` → must return `127.0.0.2/4/10`.
 - **A fresh `stalwart-data` volume must be `chown 2000:2000`** — see First boot above.
 - **`config.json` is persistence-critical** (bind-mounted storage pointer). Without it a
   container recreate wipes Stalwart back into the setup wizard.
