@@ -13,10 +13,16 @@ Central infrastructure-as-code repo. Manages all VPS, Docker deployments, CI/CD,
 | | Teeko | Blueprint |
 |---|---|---|
 | Cloudflare account | `Teekoaitech@gmail.com` | `Askblueprintagency@gmail.com` |
-| Zones | teeko.ai | kaiteki.my, blueprintdigital.my, reservetoday.app |
+| Zones | teeko.ai | kaiteki.my, blueprintdigital.my, reservetoday.app ⚠️ |
 | Hostinger account | ⚠️ unknown — see below | holds bpvps1 + bpvps2 |
 | Hosts | vps1-staging, vps2-prod, vps3-prod | bpvps1, bpvps2 |
 | CI (`deploy-infra.yml`) | automated | **not** automated — deploy by hand |
+
+> ⚠️ **`reservetoday.app` is in the Blueprint Cloudflare account but Cloudflare does NOT serve
+> it.** Its nameservers are `ns1`/`ns2.vercel-dns.com` — Vercel is authoritative, and the
+> Cloudflare zone is a staged copy for a nameserver move that has not happened. Editing it
+> changes nothing that resolves. Use `vercel dns ls|add|rm reservetoday.app` (scope
+> `blueprintdigitalmy`). Verified 2026-08-31. See `docs/tls-wildcard-constraint.md`.
 
 Shared across both, with **no** per-account split:
 
@@ -92,8 +98,9 @@ compose labels; the app → VPS → image → domain mapping is `apps/registry.y
 host whose on-host dirs differ from the repo: a single `booking` stack fans out to
 `booking-staging` + `booking-prod` per `vps/hosts.json`.
 
-> `docs/running-services.md` is a **2026-07-21 snapshot and is now stale** (it still places booking
-> on VPS3 and predates bpvps2). Treat it as history, not as inventory.
+> `docs/running-services.md` is a **2026-07-21 snapshot**, refreshed for bpvps2 on 2026-08-31
+> (booking moved off VPS3 and now has its own section). Everything else in it is still that
+> July snapshot — treat the other hosts as history, not as inventory.
 
 Four things the compose files will not tell you — all of them "do not prune":
 
