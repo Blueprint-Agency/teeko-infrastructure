@@ -32,12 +32,38 @@ Traefik on bpvps2 has two ACME resolvers:
   This is the concrete reason, not a preference.
 - **Every backend hostname on bpvps2 must be named explicitly**, one Traefik router
   rule per exact FQDN, with a DNS record to match.
-- **A new backend hostname needs its DNS record created first, DNS-only (grey
-  cloud), pointing at 187.127.207.82.** TLS-ALPN-01 proves control of port 443 on
-  that IP. If the record is proxied (orange cloud) or points at Vercel, Traefik
-  gets no certificate and the hostname serves a TLS handshake failure.
+- **A new backend hostname needs an explicit A record → 187.127.207.82 created
+  first**, and that record is made **at Vercel**, not Cloudflare — see below.
+  TLS-ALPN-01 proves control of port 443 on that IP, so without the record
+  Traefik gets no certificate and the hostname serves a TLS handshake failure.
 - **Keep the old hostname as a router alias through any rename**, until the new
   name is confirmed serving a valid certificate.
+
+## Where `reservetoday.app` DNS actually lives — read this before editing anything
+
+**Vercel is authoritative.** The zone's nameservers are `ns1.vercel-dns.com` and
+`ns2.vercel-dns.com`. Manage records with `vercel dns ls|add|rm reservetoday.app`
+under the `blueprintdigitalmy` scope.
+
+**There is also a Cloudflare zone for `reservetoday.app` in the Blueprint account,
+and it is NOT live.** It is a staged copy prepared for a nameserver move that has
+not happened. Editing it changes nothing that resolves. Verified 2026-08-31: the
+Cloudflare zone had no `api.dev` record while `api.dev.reservetoday.app` resolved
+fine, because the answer was never coming from Cloudflare. Do not trust that zone
+as a picture of reality until the nameservers actually move.
+
+**The wildcard is a trap.** Vercel serves `* ALIAS cname.vercel-dns-016.com`, so a
+hostname with no explicit record does **not** NXDOMAIN — it silently resolves to
+Vercel and serves a Vercel certificate for someone else's name. A backend
+hostname that "resolves" therefore proves nothing. Check the record exists:
+
+```bash
+vercel dns ls reservetoday.app | grep api
+```
+
+**CAA is already correct.** The zone publishes `0 issue "letsencrypt.org"` (plus
+pki.goog and sectigo.com), so Let's Encrypt is permitted to issue. A new backend
+hostname needs no CAA change.
 
 ## If this ever needs to change
 
