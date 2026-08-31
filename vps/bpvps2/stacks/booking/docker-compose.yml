@@ -1,4 +1,9 @@
-# Yoga Sadhana booking-system (Hono BE + Postgres).
+# booking-system — multi-tenant booking & management platform (Hono BE + Postgres).
+#
+# ONE deployment serves every studio. A studio is a Tenant row in `tenants`, never
+# its own stack, container or database — do not add a stack per customer. Row-Level
+# Security in Postgres is the backstop, and it only works if booking-be connects as
+# the non-owning `booking_app` role via DATABASE_APP_URL (owners bypass RLS).
 #
 # ONE file, deployed TWICE on bpvps2 — /root/stacks/booking-staging and
 # /root/stacks/booking-prod. Everything that would collide between the two

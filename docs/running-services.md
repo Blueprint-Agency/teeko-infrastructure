@@ -45,8 +45,6 @@ drizzle-gateway reaches Postgres in-network at `db-site:5432`. Login with `MASTE
 | traefik | traefik:v3.3 | traefik-vps3.teeko.ai |
 | n8n-prod | n8nio/n8n:latest | n8n.teeko.ai |
 | n8n-db | postgres:alpine | — |
-| booking-be | blueprintagency/booking-be:latest | bookingapi.teeko.ai |
-| booking-db | postgres:16-alpine | — |
 | ehailing-be | blueprintagency/ehailing-be:staging | ehailingapi.teeko.ai |
 | ehailing-db | postgis/postgis:16-3.4-alpine | — |
 | ehailing-redis | redis:7-alpine | — |
@@ -77,6 +75,33 @@ Removing any one breaks that URL's auth. Nothing here is redundant.
 | wp-db | mariadb:11.4 | — |
 | stalwart | stalwartlabs/stalwart:latest | mail ports 25/110/143/465/587/993/995/4190 |
 | bulwark | ghcr.io/bulwarkmail/webmail:latest | — (no Host label) |
+
+## bp-bpvps2 (`bpvps2`) — 187.127.207.82
+
+| Container | Image | Domain |
+|---|---|---|
+| traefik | traefik:v3.3 | traefik-bpvps2.teeko.ai |
+| booking-be-staging | blueprintagency/booking-be:staging | api.staging.reservetoday.app |
+| booking-db-staging | postgres:16-alpine | — |
+| booking-be-prod | blueprintagency/booking-be:latest | api.reservetoday.app |
+| booking-db-prod | postgres:16-alpine | — |
+| stalwart | stalwartlabs/stalwart:v0.16.16 | mail ports |
+| unbound | klutchell/unbound:latest | — (resolver for stalwart) |
+| bulwark | ghcr.io/bulwarkmail/webmail:latest | — (no Host label) |
+
+booking-system is a **multi-tenant** platform: one deployment serves every studio, and a
+studio is a Tenant row in `tenants` — never its own stack, container or database. The two
+instances here are *environments* (staging / prod), not customers.
+
+Both come from `vps/bpvps2/stacks/booking/docker-compose.yml`, deployed twice under
+`/root/stacks/booking-staging` and `/root/stacks/booking-prod`, keyed off `ENV_NAME`. The
+Traefik rule reads a full `BOOKING_FQDN` from each stack's `.env`, because booking lives on
+`reservetoday.app` and the host-wide `BASE_DOMAIN` is `teeko.ai`. Certificates come from the
+`le-tls` resolver (TLS-ALPN-01) — see [`tls-wildcard-constraint.md`](./tls-wildcard-constraint.md)
+for why DNS-01 and wildcards are not available for this zone.
+
+Moved here from VPS3 on 2026-07-21. Deploys are driven by `deploy-be.yml` in
+`Blueprint-Agency/booking-system`, not from this repo.
 
 ## Removed 2026-07-21
 

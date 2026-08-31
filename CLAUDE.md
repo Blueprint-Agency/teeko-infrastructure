@@ -105,10 +105,13 @@ Four things the compose files will not tell you — all of them "do not prune":
 > `*-dex` IdP) and **all three are required** to serve `https://ga4.teeko.ai/mcp` and
 > `https://gsc.teeko.ai/mcp`. The `*-mcp` backends have no public route. None are redundant.
 
-> **`booking-staging` (bookingapi.teeko.ai) carries the real data**; `booking-prod`
-> (prodbookingapi.teeko.ai) is fresh. The names read backwards because staging was the only
-> instance until the 2026-07-21 split. Swap the domains at real prod launch, and repoint the
-> Clerk/Stripe webhooks when you do.
+> **booking-system is multi-tenant.** One deployment serves every studio; a studio is a
+> Tenant row in `tenants`, never its own stack, container or database. Never add a stack
+> per customer. `booking-staging` (api.staging.reservetoday.app) carries the real data;
+> `booking-prod` (api.reservetoday.app) is fresh. Both live on **bpvps2** since the
+> 2026-07-21 move off VPS3. The domains are on `reservetoday.app` — the registry claimed
+> `bookingapi.teeko.ai` until 2026-08-31, which was drift, not the truth. bpvps2 cannot
+> issue a wildcard for that zone: see [`docs/tls-wildcard-constraint.md`](docs/tls-wildcard-constraint.md).
 
 > **Portainer and pgAdmin are gone** (removed 2026-07-21) — no container UI at all. Postgres is
 > managed via drizzle-gateway on all 3 Teeko VPS (`stagingpg` / `pg` / `pg3`.teeko.ai), all sharing

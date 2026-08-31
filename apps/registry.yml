@@ -62,18 +62,21 @@ apps:
       production: bpvps2
     port: 4000
     domain:
-      staging: bookingapi.teeko.ai
-      production: prodbookingapi.teeko.ai
+      staging: api.staging.reservetoday.app
+      production: api.reservetoday.app
     db: local-postgres
-    notes: "Yoga Sadhana booking-system backend (Hono + Drizzle + Postgres). Built from
-      booking-system/be by that repo's deploy-be.yml: staging branch -> booking-staging
-      stack, main branch -> booking-prod stack. BOTH instances live on bpvps2, sharing
-      only Traefik — separate containers, volumes, networks and databases keyed off
-      ENV_NAME in the shared compose file.
+    notes: "Multi-tenant booking & management platform backend (Hono + Drizzle + Postgres).
+      One deployment serves every studio; a studio is a Tenant row, never its own stack.
+      Built from booking-system/be by that repo's deploy-be.yml: staging branch ->
+      booking-staging stack, main branch -> booking-prod stack. BOTH instances live on
+      bpvps2, sharing only Traefik — separate containers, volumes, networks and databases
+      keyed off ENV_NAME in the shared compose file.
+      The domains moved off teeko.ai to reservetoday.app; the registry said otherwise
+      until 2026-08-31. The Traefik rule takes a full BOOKING_FQDN from each stack's .env,
+      not a subdomain of the host-wide BASE_DOMAIN, and the certificate comes from the
+      le-tls resolver (TLS-ALPN-01), NOT DNS-01 — see docs/tls-wildcard-constraint.md.
       Migrated off vps3-prod on 2026-07-21; staging carries the original data, prod
-      started empty. NOTE: staging holds the bookingapi.teeko.ai name because it was
-      the only instance until the split — swap the two domains at real prod launch,
-      and repoint the Clerk/Stripe webhooks when you do."
+      started empty."
 
   - name: kaiteki-web
     image: blueprintagency/kaiteki-web
