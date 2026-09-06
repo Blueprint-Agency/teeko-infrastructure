@@ -62,7 +62,7 @@ apps:
       production: bpvps2
     port: 4000
     domain:
-      staging: api.staging.reservetoday.app
+      staging: api.dev.reservetoday.app
       production: api.reservetoday.app
     db: local-postgres
     notes: "Multi-tenant booking & management platform backend (Hono + Drizzle + Postgres).
@@ -72,7 +72,10 @@ apps:
       bpvps2, sharing only Traefik — separate containers, volumes, networks and databases
       keyed off ENV_NAME in the shared compose file.
       The domains moved off teeko.ai to reservetoday.app; the registry said otherwise
-      until 2026-08-31. The Traefik rule takes a full BOOKING_FQDN from each stack's .env,
+      until 2026-08-31. Staging answers on api.dev, not api.staging — the frontends'
+      staging tenants live under *.dev.reservetoday.app, and the backend was aligned to
+      the same word rather than carrying a second one.
+      The Traefik rule takes a full BOOKING_FQDN from each stack's .env,
       not a subdomain of the host-wide BASE_DOMAIN, and the certificate comes from the
       le-tls resolver (TLS-ALPN-01), NOT DNS-01 — see docs/tls-wildcard-constraint.md.
       Migrated off vps3-prod on 2026-07-21; staging carries the original data, prod

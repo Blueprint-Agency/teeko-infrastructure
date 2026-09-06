@@ -81,7 +81,7 @@ Removing any one breaks that URL's auth. Nothing here is redundant.
 | Container | Image | Domain |
 |---|---|---|
 | traefik | traefik:v3.3 | traefik-bpvps2.teeko.ai |
-| booking-be-staging | blueprintagency/booking-be:staging | api.staging.reservetoday.app |
+| booking-be-staging | blueprintagency/booking-be:staging | api.dev.reservetoday.app |
 | booking-db-staging | postgres:16-alpine | — |
 | booking-be-prod | blueprintagency/booking-be:latest | api.reservetoday.app |
 | booking-db-prod | postgres:16-alpine | — |
