@@ -17,7 +17,6 @@
 # per-network, so there is no cross-talk.
 #
 # Set in each stack's .env:  ENV_NAME=staging|prod  BOOKING_FQDN=<full hostname>
-#                            BOOKING_FQDN_ALIAS=<full hostname, = BOOKING_FQDN when idle>
 #
 # BOOKING_FQDN is a FULL hostname, not a subdomain of the host-wide BASE_DOMAIN
 # (teeko.ai) — booking lives on reservetoday.app, which BASE_DOMAIN can't express.
@@ -47,17 +46,25 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      # Two hostnames, because a rename has to overlap: the new name must serve a
-      # valid certificate before anything is repointed at it, and the old name must
-      # keep working until nothing calls it. BOOKING_FQDN_ALIAS is REQUIRED — set it
-      # equal to BOOKING_FQDN when there is no rename in flight, since an unset var
-      # renders Host(``), which Traefik rejects, and the router then disappears
-      # while TLS still terminates — the failure looks like a 404, not an outage.
+      # One hostname. There used to be a second, `BOOKING_FQDN_ALIAS`, so that a
+      # rename could overlap — the new name serving a valid certificate before
+      # anything was repointed at it, the old name still answering until nothing
+      # called it. The api.staging -> api.dev rename it was added for is finished,
+      # and both stacks had been carrying it set equal to BOOKING_FQDN, so the rule
+      # read `Host(x) || Host(x)`.
       #
-      # `Host(a) || Host(b)`, NOT `Host(a, b)`. Traefik v3's Host matcher takes
-      # exactly one parameter and rejects the list form with "unexpected number of
-      # parameters; got 2, expected one of [1]". Verified the hard way on 2026-08-31.
-      - "traefik.http.routers.booking-be-${ENV_NAME}.rule=Host(`${BOOKING_FQDN}`) || Host(`${BOOKING_FQDN_ALIAS}`)"
+      # It is gone rather than left idle because idle was not free: the variable was
+      # REQUIRED whether or not a rename was in flight, since an unset one renders
+      # Host(``), which Traefik rejects — the router then disappears while TLS still
+      # terminates, so the failure looks like a 404 rather than an outage. A
+      # mechanism that breaks the site when someone tidies away a duplicate line is
+      # worse than writing the second Host() again on the day it is next needed.
+      #
+      # When that day comes: `Host(a) || Host(b)`, NOT `Host(a, b)`. Traefik v3's
+      # Host matcher takes exactly one parameter and rejects the list form with
+      # "unexpected number of parameters; got 2, expected one of [1]". Verified the
+      # hard way on 2026-08-31, and worth keeping written down.
+      - "traefik.http.routers.booking-be-${ENV_NAME}.rule=Host(`${BOOKING_FQDN}`)"
       - "traefik.http.routers.booking-be-${ENV_NAME}.entrypoints=websecure"
       # le-tls, not letsencrypt: booking is on reservetoday.app, whose DNS is served
       # by VERCEL (ns1/ns2.vercel-dns.com) — the Blueprint Cloudflare zone of that
