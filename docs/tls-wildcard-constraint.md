@@ -19,10 +19,13 @@ Traefik on bpvps2 has two ACME resolvers:
 
 2. **The DNS-01 resolver cannot reach the right Cloudflare account.**
    `CF_DNS_API_TOKEN` on this host is an org-level secret holding the **Teeko**
-   token, scoped to `teeko.ai`. `reservetoday.app` lives in the **Blueprint**
-   Cloudflare account. Traefik reads that token from the **process environment**,
-   not per-resolver — so adding a second DNS-01 resolver for reservetoday.app
-   would silently reuse the Teeko token and fail. bpvps1 has the opposite problem
+   token, scoped to `teeko.ai`. `reservetoday.app` was in the **Blueprint**
+   Cloudflare account when this was recorded, and has since moved to **Vercel
+   nameservers** — which removes the Cloudflare token as an option entirely
+   rather than restoring one. Traefik reads that token from the **process
+   environment**, not per-resolver — so adding a second DNS-01 resolver for
+   reservetoday.app would silently reuse the Teeko token and fail, and there is
+   no longer a Cloudflare zone for it to reach. bpvps1 has the opposite problem
    and overrides the token at the host level; bpvps2 cannot, because its Teeko
    certs would then break.
 

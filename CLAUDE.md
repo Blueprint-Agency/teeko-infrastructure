@@ -114,7 +114,7 @@ Four things the compose files will not tell you — all of them "do not prune":
 
 > **booking-system is multi-tenant.** One deployment serves every studio; a studio is a
 > Tenant row in `tenants`, never its own stack, container or database. Never add a stack
-> per customer. `booking-staging` (api.staging.reservetoday.app) carries the real data;
+> per customer. `booking-staging` (api.dev.reservetoday.app) carries the real data;
 > `booking-prod` (api.reservetoday.app) is fresh. Both live on **bpvps2** since the
 > 2026-07-21 move off VPS3. The domains are on `reservetoday.app` — the registry claimed
 > `bookingapi.teeko.ai` until 2026-08-31, which was drift, not the truth. bpvps2 cannot
